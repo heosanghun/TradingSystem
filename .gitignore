@@ -1,0 +1,22 @@
+# Virtual environment & Python caches
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Thesis documents, PDFs, & internal notes (never upload to public repo)
+doc/
+*.pdf
+구현계획_*.md
+
+# Cloned reference repositories (read-only audit reference)
+_gh_refs/
+
+# Raw/cached market datasets, LLM caches, & experiment run artifacts
+data/
+runs/
+*.sqlite
+*.pt
+*.pth
+*.onnx
