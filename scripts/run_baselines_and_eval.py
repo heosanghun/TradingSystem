@@ -117,9 +117,9 @@ def main() -> None:
     bh_w = BuyAndHoldBaseline().predict_weights(len(eval_df))
     res_p2 = {
         "BH": bt.run(eval_df, bh_w, phase=2),
-        "SINGLE_PPO": bt.run(eval_df, np.concatenate(p2_w_single), phase=2),
-        "STATIC_ENS": bt.run(eval_df, np.concatenate(p2_w_static), phase=2),
-        "MAML": bt.run(eval_df, np.concatenate(p2_w_maml), phase=2),
+        "SINGLE_PPO": bt.run_decisions(eval_df, np.concatenate(p2_w_single), phase=2),
+        "STATIC_ENS": bt.run_decisions(eval_df, np.concatenate(p2_w_static), phase=2),
+        "MAML": bt.run_decisions(eval_df, np.concatenate(p2_w_maml), phase=2),
     }
 
     # Phase 1 K-Fold CV evaluation (`Table 6.6`)
@@ -152,9 +152,9 @@ def main() -> None:
 
     res_p1 = {
         "BH": bt.run(eval_df, bh_w, phase=1),
-        "SINGLE_PPO": bt.run(eval_df, p1_single_w, phase=1),
-        "STATIC_ENS": bt.run(eval_df, p1_static_w, phase=1),
-        "MAML": bt.run(eval_df, p1_maml_w, phase=1),
+        "SINGLE_PPO": bt.run_decisions(eval_df, p1_single_w, phase=1),
+        "STATIC_ENS": bt.run_decisions(eval_df, p1_static_w, phase=1),
+        "MAML": bt.run_decisions(eval_df, p1_maml_w, phase=1),
     }
 
     # Table 6.8 Crisis Windows for Static Ensemble RL (filling Luna blank + re-verifying FTX)

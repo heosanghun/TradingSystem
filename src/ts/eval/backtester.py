@@ -55,6 +55,37 @@ class CausalPortfolioBacktester:
         self.phase2_kappa = float(phase2_kappa)
         self.phase2_eta = float(phase2_eta)
 
+    def run_decisions(
+        self,
+        ohlcv_df: pd.DataFrame,
+        decision_weights: np.ndarray,
+        phase: int = 2,
+        precomputed_atr: Optional[np.ndarray] = None,
+    ) -> BacktestResult:
+        """
+        Backtest weights that were DECIDED at the close of each bar.
+
+        `decision_weights[t]` is the target weight a model outputs after observing bar `t`
+        completely (its close, its features, news published during it). That weight can only
+        be held from bar `t + 1` onward, so it is shifted by one bar before simulation:
+        the position held across bar `t` is `decision_weights[t - 1]`, and bar `0` is flat.
+
+        Every strategy whose state at index `t` contains bar `t`'s close must go through this
+        method. Passing such weights straight to `run` credits the decision with the return of
+        the bar it has already seen (one-bar look-ahead).
+        """
+        dec = np.asarray(decision_weights, dtype=np.float64)
+        held = np.zeros_like(dec)
+        if len(dec) > 1:
+            held[1:] = dec[:-1]
+        return self.run(
+            ohlcv_df,
+            held,
+            phase=phase,
+            precomputed_atr=precomputed_atr,
+            initial_prev_weight=0.0,
+        )
+
     def run(
         self,
         ohlcv_df: pd.DataFrame,

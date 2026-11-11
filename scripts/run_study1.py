@@ -306,19 +306,19 @@ def main() -> None:
         bars_per_year=cfg.evaluation.btc_bars_per_year,
     )
 
-    res_var_d = bt.run(eval_df, np.concatenate(oos_var_d_weights), phase=2)
-    res_var_a = bt.run(eval_df, np.concatenate(oos_var_a_weights), phase=2)
-    res_var_b = bt.run(eval_df, np.concatenate(oos_var_b_weights), phase=2)
-    res_var_c = bt.run(eval_df, np.concatenate(oos_var_c_weights), phase=2)
+    res_var_d = bt.run_decisions(eval_df, np.concatenate(oos_var_d_weights), phase=2)
+    res_var_a = bt.run_decisions(eval_df, np.concatenate(oos_var_a_weights), phase=2)
+    res_var_b = bt.run_decisions(eval_df, np.concatenate(oos_var_b_weights), phase=2)
+    res_var_c = bt.run_decisions(eval_df, np.concatenate(oos_var_c_weights), phase=2)
 
     table_6_12 = {}
     for tk in temp_keys:
-        r_t = bt.run(eval_df, np.concatenate(oos_temp_weights[tk]), phase=2)
+        r_t = bt.run_decisions(eval_df, np.concatenate(oos_temp_weights[tk]), phase=2)
         table_6_12[tk] = r_t.summary.to_dict()
 
     table_6_13 = {}
     for kk in expert_keys:
-        r_k = bt.run(eval_df, np.concatenate(oos_k_weights[kk]), phase=2)
+        r_k = bt.run_decisions(eval_df, np.concatenate(oos_k_weights[kk]), phase=2)
         table_6_13[str(kk)] = r_k.summary.to_dict()
 
     if shap_period2_results:
