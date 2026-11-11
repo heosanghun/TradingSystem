@@ -28,7 +28,7 @@ from ts.eval.latency_benchmark import benchmark_student_and_teacher_latency
 from ts.ledger import NumberLedger
 from ts.study1.regime_labeling import REGIME_NAMES
 from ts.study2.causality import discover_candidate_edges
-from ts.study2.citation_verifier import CitationVerifier
+from ts.study2.citation_verifier import CitationVerificationStats, CitationVerifier
 from ts.study2.debate import GroundedDebateEngine
 from ts.study2.hypergraph import DynamicFinancialHypergraph, build_daily_hypergraph
 from ts.study2.llm_client import LLMClient
@@ -68,18 +68,27 @@ def main() -> None:
         else PointInTimeNewsStore()
     )
 
-    # Load Study 1 OOS signals if present; otherwise evaluate across first_train_start..eval_end
+    # Load Study 1 full Teacher timeline signals (`2020-10`..`2023-12`) if present
     s1_file = PROJECT_ROOT / "runs" / "study1" / "study1_oos_signals.npz"
+    eval_start_ts = pd.Timestamp(cfg.data.eval_start)
     if s1_file.exists():
         s1_npz = np.load(s1_file)
-        target_bar_indices = s1_npz["oos_bar_indices"]
-        oos_regimes = s1_npz["oos_regimes"]
-        oos_probs = s1_npz["oos_ens_probs"]
+        if "teacher_bar_indices" in s1_npz.files:
+            target_bar_indices = s1_npz["teacher_bar_indices"]
+            bar_regimes = s1_npz["teacher_regimes"]
+            bar_probs = s1_npz["teacher_ens_probs"]
+            is_oos_mask = s1_npz["teacher_is_oos"].astype(bool)
+        else:
+            target_bar_indices = s1_npz["oos_bar_indices"]
+            bar_regimes = s1_npz["oos_regimes"]
+            bar_probs = s1_npz["oos_ens_probs"]
+            is_oos_mask = np.ones(len(target_bar_indices), dtype=bool)
     else:
         first_tr_ts = pd.Timestamp(cfg.data.first_train_start)
         target_bar_indices = np.where(df_all.index >= first_tr_ts)[0]
-        oos_regimes = np.full(len(target_bar_indices), 2, dtype=np.int64)
-        oos_probs = np.full((len(target_bar_indices), 5), 0.2, dtype=np.float32)
+        bar_regimes = np.full(len(target_bar_indices), 2, dtype=np.int64)
+        bar_probs = np.full((len(target_bar_indices), 5), 0.2, dtype=np.float32)
+        is_oos_mask = np.asarray(df_all.index[target_bar_indices] >= eval_start_ts, dtype=bool)
 
     llm = LLMClient(
         backend=args.llm_backend,
@@ -111,8 +120,16 @@ def main() -> None:
 
     cf_grounded_acts: List[int] = []
     cf_stripped_acts: List[int] = []
+    oos_stats_reset_done = False
+    oos_counter = 0
 
     for pos_i, bar_idx in enumerate(target_bar_indices):
+        is_oos_bar = bool(is_oos_mask[pos_i])
+        if is_oos_bar and not oos_stats_reset_done:
+            # Measure Table 6.15 citation & hallucination telemetry strictly on out-of-sample bars
+            verifier.stats = CitationVerificationStats()
+            oos_stats_reset_done = True
+
         bar_ts = pd.Timestamp(df_all.index[bar_idx])
         day_str = bar_ts.strftime("%Y-%m-%d")
 
@@ -143,14 +160,14 @@ def main() -> None:
             current_day_str = day_str
 
         assert current_hg is not None
-        reg_name = REGIME_NAMES.get(int(oos_regimes[pos_i]), "Sideways")
+        reg_name = REGIME_NAMES.get(int(bar_regimes[pos_i]), "Sideways")
         headlines_1h = news_store.format_headlines_for_llm(bar_ts + pd.Timedelta(hours=1), lookback_hours=6.0)
 
         outcome = debate_engine.run_bar_debate(
             hypergraph=current_hg,
             news_headlines_text=headlines_1h,
             study1_regime_name=reg_name,
-            study1_probs=oos_probs[pos_i],
+            study1_probs=bar_probs[pos_i],
             target_asset=cfg.data.primary_symbol,
             strip_evidence=False,
         )
@@ -158,17 +175,26 @@ def main() -> None:
         teacher_actions[pos_i] = outcome.discrete_action
         consensus_texts.append(outcome.consensus_text)
 
-        if pos_i % max(1, args.counterfactual_stride) == 0:
-            cf_out = debate_engine.run_bar_debate(
-                hypergraph=current_hg,
-                news_headlines_text=headlines_1h,
-                study1_regime_name=reg_name,
-                study1_probs=oos_probs[pos_i],
-                target_asset=cfg.data.primary_symbol,
-                strip_evidence=True,
-            )
-            cf_grounded_acts.append(outcome.discrete_action)
-            cf_stripped_acts.append(cf_out.discrete_action)
+        if is_oos_bar:
+            if oos_counter % max(1, args.counterfactual_stride) == 0:
+                cf_out = debate_engine.run_bar_debate(
+                    hypergraph=current_hg,
+                    news_headlines_text=headlines_1h,
+                    study1_regime_name=reg_name,
+                    study1_probs=bar_probs[pos_i],
+                    target_asset=cfg.data.primary_symbol,
+                    strip_evidence=True,
+                )
+                cf_grounded_acts.append(outcome.discrete_action)
+                cf_stripped_acts.append(cf_out.discrete_action)
+            oos_counter += 1
+
+    # Snapshot Table 6.15 OOS citation & hallucination telemetry BEFORE synthetic latency benchmark!
+    cite_match_pct = verifier.stats.citation_match_rate * 100.0
+    halluc_rej_pct = verifier.stats.hallucination_rejection_rate * 100.0
+    cf_g = np.asarray(cf_grounded_acts, dtype=np.int64)
+    cf_s = np.asarray(cf_stripped_acts, dtype=np.int64)
+    flip_rate_pct = float(np.mean(cf_g != cf_s)) * 100.0 if len(cf_g) > 0 else 0.0
 
     # Benchmark direct Teacher inference latency (Table 6.14 Teacher row)
     sample_hg = current_hg or DynamicFinancialHypergraph(nodes=list(returns_60_df.columns), simple_edges=[])
@@ -184,12 +210,6 @@ def main() -> None:
         n_student_runs=1000,
         n_teacher_runs=20,
     )
-
-    cf_g = np.asarray(cf_grounded_acts, dtype=np.int64)
-    cf_s = np.asarray(cf_stripped_acts, dtype=np.int64)
-    flip_rate_pct = float(np.mean(cf_g != cf_s)) * 100.0 if len(cf_g) > 0 else 0.0
-    cite_match_pct = verifier.stats.citation_match_rate * 100.0
-    halluc_rej_pct = verifier.stats.hallucination_rejection_rate * 100.0
 
     np.savez_compressed(
         out_dir / "teacher_signals.npz",

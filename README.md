@@ -69,8 +69,11 @@ c:\Project\TradingSystem\
 모든 명령어는 로컬 가상환경 `c:\Project\TradingSystem\.venv\Scripts\python.exe` 내부에서 실행합니다.
 
 ```powershell
-# 1. 단위·통합 테스트 전체 검증
+# 1. 단위·통합 테스트 전체 검증 (fig1 전체 18개 노드 End-to-End 데이터 흐름 검증 포함)
 .\.venv\Scripts\pytest.exe -q
+
+# [원클릭 통합 실행] fig1 전체 시스템 아키텍처 순서대로 전 단계 일괄 실행
+.\.venv\Scripts\python.exe scripts/run_full_pipeline.py --llm-backend openai_compat --llm-endpoint http://localhost:8000/v1/chat/completions
 
 # 2. WP0: 바이낸스 BTC/USDT + SPY/GLD 실측 통계(표 6.2), ADF/Ljung-Box, B&H, 학생 10,000회 지연(표 6.14)
 .\.venv\Scripts\python.exe scripts/run_wp0_data_and_stats.py

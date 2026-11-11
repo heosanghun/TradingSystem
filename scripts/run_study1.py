@@ -40,6 +40,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run Study 1 Walk-Forward Evaluation & Sensitivity Sweeps.")
     parser.add_argument("--config", type=str, default=str(DEFAULT_CONFIG_PATH))
     parser.add_argument("--news-file", type=str, default="", help="Optional CSV/Parquet news archive with published_at & headline.")
+    parser.add_argument("--offline-finbert-hash", action="store_true", help="Skip HuggingFace FinBERT download when scoring raw headlines offline.")
     parser.add_argument("--pretrain-epochs", type=int, default=4)
     parser.add_argument("--ppo-rollouts", type=int, default=8)
     args = parser.parse_args()
@@ -66,6 +67,14 @@ def main() -> None:
         if args.news_file and Path(args.news_file).exists()
         else PointInTimeNewsStore()
     )
+    if not news_store.df.empty:
+        n_scored = news_store.populate_missing_logits_with_finbert(
+            model_name=cfg.study3.finbert_model,
+            offline_hash_mode=args.offline_finbert_hash,
+            device=device,
+        )
+        if n_scored > 0:
+            print(f"[Study 1] Scored {n_scored} raw news headlines into 3-class sentiment logits.")
 
     print(f"[Study 1] Rendering 60-bar candlestick charts and causal features for {len(df_all)} bars on {device}...")
     chart_renderer = CandlestickChartRenderer(
@@ -106,6 +115,9 @@ def main() -> None:
     oos_indices_all: List[np.ndarray] = []
     oos_regimes_all: List[np.ndarray] = []
     oos_ens_probs_all: List[np.ndarray] = []
+    fold1_tr_indices: np.ndarray | None = None
+    fold1_tr_regimes: np.ndarray | None = None
+    fold1_tr_probs: np.ndarray | None = None
     oos_var_d_weights: List[np.ndarray] = []
     oos_var_a_weights: List[np.ndarray] = []
     oos_var_b_weights: List[np.ndarray] = []
@@ -176,6 +188,19 @@ def main() -> None:
         )
 
         # Primary Study 1 (`K = 5, T = 10.0` = Variant D)
+        if fold.fold_id == 1:
+            tr_probs_d, _, _ = ens.rollout_causal_policy(
+                states=tr_states,
+                active_regimes=tr_pred_regimes,
+                bar_asset_returns=next_ret_all[tr_idx],
+                one_way_cost_rates=base_costs_all[tr_idx],
+                temperature=cfg.study1_ppo.ensemble_temperature,
+                num_experts_subset=cfg.study1_ppo.experts_per_regime,
+            )
+            fold1_tr_indices = tr_idx
+            fold1_tr_regimes = tr_pred_regimes
+            fold1_tr_probs = tr_probs_d
+
         ens_probs_d, _, w_d = ens.rollout_causal_policy(
             states=te_states,
             active_regimes=te_pred_regimes,
@@ -310,12 +335,31 @@ def main() -> None:
         "tech_plus_sentiment_pct": tech_mean + senti_mean,
     }
 
+    cat_oos_regimes = np.concatenate(oos_regimes_all)
+    cat_oos_probs = np.concatenate(oos_ens_probs_all)
+    if fold1_tr_indices is not None and fold1_tr_regimes is not None and fold1_tr_probs is not None:
+        teacher_bar_indices = np.concatenate([fold1_tr_indices, cat_idx])
+        teacher_regimes = np.concatenate([fold1_tr_regimes, cat_oos_regimes])
+        teacher_ens_probs = np.concatenate([fold1_tr_probs, cat_oos_probs], axis=0)
+        teacher_is_oos = np.concatenate(
+            [np.zeros(len(fold1_tr_indices), dtype=bool), np.ones(len(cat_idx), dtype=bool)]
+        )
+    else:
+        teacher_bar_indices = cat_idx
+        teacher_regimes = cat_oos_regimes
+        teacher_ens_probs = cat_oos_probs
+        teacher_is_oos = np.ones(len(cat_idx), dtype=bool)
+
     np.savez_compressed(
         out_dir / "study1_oos_signals.npz",
         oos_bar_indices=cat_idx,
-        oos_regimes=np.concatenate(oos_regimes_all),
-        oos_ens_probs=np.concatenate(oos_ens_probs_all),
+        oos_regimes=cat_oos_regimes,
+        oos_ens_probs=cat_oos_probs,
         oos_var_d_weights=np.concatenate(oos_var_d_weights),
+        teacher_bar_indices=teacher_bar_indices,
+        teacher_regimes=teacher_regimes,
+        teacher_ens_probs=teacher_ens_probs,
+        teacher_is_oos=teacher_is_oos,
     )
 
     metrics_payload = {

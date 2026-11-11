@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Union
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
+import torch
 
 from ts.data.temporal_guard import assert_no_future_leakage
 
@@ -138,6 +139,69 @@ class PointInTimeNewsStore:
         probs = exp_z / np.sum(exp_z, axis=-1, keepdims=True)
         scores = probs[:, 2] - probs[:, 0]
         return scores, probs
+
+    @torch.no_grad()
+    def populate_missing_logits_with_finbert(
+        self,
+        model_name: str = "ProsusAI/finbert",
+        batch_size: int = 64,
+        offline_hash_mode: bool = False,
+        device: Optional[torch.device] = None,
+    ) -> int:
+        """
+        Automatically computes 3-class sentiment logits `(logit_neg, logit_neu, logit_pos)`
+        for any raw `(published_at, headline)` rows where precomputed logits are missing.
+        Maps HuggingFace `id2label` (`positive`, `negative`, `neutral`) dynamically so label
+        ordering is guaranteed exact regardless of checkpoint label indices.
+        """
+        if self.df.empty:
+            return 0
+
+        missing_mask = self.df[["logit_neg", "logit_neu", "logit_pos"]].isna().any(axis=1)
+        missing_idx = self.df.index[missing_mask]
+        if len(missing_idx) == 0:
+            return 0
+
+        headlines = self.df.loc[missing_idx, "headline"].astype(str).tolist()
+        logits_ordered = np.zeros((len(headlines), 3), dtype=np.float32)  # [neg, neu, pos]
+
+        if offline_hash_mode:
+            for i, text in enumerate(headlines):
+                digest = hashlib.sha256(text.encode("utf-8")).digest()
+                seed_val = int.from_bytes(digest[:8], "little")
+                rng = np.random.default_rng(seed_val)
+                logits_ordered[i] = rng.standard_normal(3).astype(np.float32)
+        else:
+            from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+            dev = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            tok = AutoTokenizer.from_pretrained(model_name)
+            clf = AutoModelForSequenceClassification.from_pretrained(model_name).to(dev)
+            clf.eval()
+
+            id2label = {int(k): str(v).lower() for k, v in clf.config.id2label.items()}
+            neg_i = next((k for k, v in id2label.items() if "neg" in v), 0)
+            neu_i = next((k for k, v in id2label.items() if "neu" in v), 1)
+            pos_i = next((k for k, v in id2label.items() if "pos" in v), 2)
+
+            for s in range(0, len(headlines), batch_size):
+                batch_h = headlines[s : s + batch_size]
+                enc = tok(
+                    batch_h,
+                    padding=True,
+                    truncation=True,
+                    max_length=128,
+                    return_tensors="pt",
+                ).to(dev)
+                raw_out = clf(**enc).logits.detach().cpu().numpy().astype(np.float32)
+                logits_ordered[s : s + batch_size, 0] = raw_out[:, neg_i]
+                logits_ordered[s : s + batch_size, 1] = raw_out[:, neu_i]
+                logits_ordered[s : s + batch_size, 2] = raw_out[:, pos_i]
+
+        self.df.loc[missing_idx, "logit_neg"] = logits_ordered[:, 0]
+        self.df.loc[missing_idx, "logit_neu"] = logits_ordered[:, 1]
+        self.df.loc[missing_idx, "logit_pos"] = logits_ordered[:, 2]
+        return len(headlines)
 
     def build_hourly_sentiment_summary(
         self,

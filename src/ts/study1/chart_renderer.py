@@ -12,7 +12,7 @@ Implements Chapter III Sec 1.1 & Table A.2:
 
 from __future__ import annotations
 
-from typing import Tuple
+from typing import Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -30,9 +30,12 @@ COLOR_BEAR = (31, 119, 180)   # Blue (음봉)
 class CandlestickChartRenderer:
     """Renders 60-bar OHLCV windows into `(3, 224, 224)` tensors without Matplotlib overhead."""
 
-    def __init__(self, window_bars: int = 60, image_size: Tuple[int, int] = (224, 224)) -> None:
+    def __init__(self, window_bars: int = 60, image_size: Union[int, Tuple[int, int]] = (224, 224)) -> None:
         self.window_bars = window_bars
-        self.width, self.height = int(image_size[0]), int(image_size[1])
+        if isinstance(image_size, int):
+            self.width, self.height = int(image_size), int(image_size)
+        else:
+            self.width, self.height = int(image_size[0]), int(image_size[1])
 
     def render_pil(
         self, opens: np.ndarray, highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, volumes: np.ndarray
