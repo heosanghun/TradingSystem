@@ -211,13 +211,13 @@ def main() -> None:
     table_6_11 = {}
     for l3 in lambda3_grid:
         acts = np.concatenate(oos_actions_by_l3[l3])
-        res = bt.run(eval_df, ACTION_WEIGHTS[acts], phase=2)
+        res = bt.run_decisions(eval_df, ACTION_WEIGHTS[acts], phase=2)
         table_6_11[f"{l3:.1f}"] = res.summary.to_dict()
 
     # Primary Proposed Model (`lambda_3 = 0.2`) Phase 2 + Crisis Windows + Teacher-Student Agreement
     primary_acts = np.concatenate(oos_actions_by_l3[cfg.study3.lambda_reasoning])
     primary_weights = ACTION_WEIGHTS[primary_acts]
-    res_p2 = bt.run(eval_df, primary_weights, phase=2)
+    res_p2 = bt.run_decisions(eval_df, primary_weights, phase=2)
 
     crisis_proposed = {}
     for w_name, (c_start, c_end) in cfg.evaluation.crisis_windows.items():
@@ -260,7 +260,7 @@ def main() -> None:
         for k_pos, g_idx in enumerate(p1_te):
             p1_pred_weights[idx_to_local[int(g_idx)]] = ACTION_WEIGHTS[acts_p1_np[k_pos]]
 
-    res_p1 = bt.run(eval_df, p1_pred_weights, phase=1)
+    res_p1 = bt.run_decisions(eval_df, p1_pred_weights, phase=1)
 
     np.savez_compressed(
         out_dir / "student_oos_predictions.npz",
