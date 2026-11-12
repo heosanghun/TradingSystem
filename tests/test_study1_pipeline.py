@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from ts.study1.attribution import compute_modality_group_shapley
 from ts.study1.chart_renderer import CandlestickChartRenderer, normalize_chart_batch_to_tensor
 from ts.study1.encoders import CrossModalStateFusion, MultimodalStateEncoder, TechnicalIndicatorCalculator
 from ts.study1.ensemble import DynamicRegimeEnsemble
@@ -152,3 +153,107 @@ def test_uint8_lazy_chart_normalization_matches_float32_and_default_pretrained_s
     )
     assert np.allclose(st_u8, st_f32, atol=1e-5)
     assert np.allclose(mod_u8, mod_f32, atol=1e-5)
+
+
+def test_variant_a_modality_ablation_preserves_regime_and_ensemble_pipeline() -> None:
+    df = _make_synthetic_ohlcv(90)
+    charts_a = CandlestickChartRenderer(window_bars=20).render_series_uint8(df)
+    charts_b = np.full_like(charts_a, 255)
+    tech = TechnicalIndicatorCalculator(zscore_window=20).compute(df).to_numpy(dtype=np.float32)
+    senti_a = np.zeros((90, 8), dtype=np.float32)
+    senti_b = np.ones((90, 8), dtype=np.float32) * 3.0
+    labels = np.array([i % 3 for i in range(60)], dtype=np.int64)
+    tr_idx = np.arange(0, 60)
+    te_idx = np.arange(60, 90)
+
+    enc_tech = MultimodalStateEncoder(pretrained_resnet=False, modality_mode="tech_only")
+    assert enc_tech.visual_encoder is None and enc_tech.senti_encoder is None
+    enc_tech.pretrain_on_fold_regimes(
+        charts_a, tech, senti_a, labels, epochs=1, batch_size=16, device=torch.device("cpu"), indices=tr_idx
+    )
+    st_te_1, _ = enc_tech.encode_dataset(charts_a, tech, senti_a, device=torch.device("cpu"), indices=te_idx)
+    st_te_2, _ = enc_tech.encode_dataset(charts_b, tech, senti_b, device=torch.device("cpu"), indices=te_idx)
+    assert st_te_1.shape == (30, 128)
+    assert np.allclose(st_te_1, st_te_2, atol=1e-7)
+
+    enc_vt = MultimodalStateEncoder(pretrained_resnet=False, modality_mode="visual_tech_no_senti")
+    assert enc_vt.visual_encoder is not None and enc_vt.senti_encoder is None
+    st_vt_1, _ = enc_vt.encode_dataset(charts_a, tech, senti_a, device=torch.device("cpu"), indices=te_idx)
+    st_vt_2, _ = enc_vt.encode_dataset(charts_a, tech, senti_b, device=torch.device("cpu"), indices=te_idx)
+    assert np.allclose(st_vt_1, st_vt_2, atol=1e-7)
+
+
+def test_group_shapley_active_regime_chosen_logit_3seed_stability() -> None:
+    rng = np.random.default_rng(2026)
+    n_bars = 640
+    concat_mods = rng.normal(0.0, 1.0, size=(n_bars, 224)).astype(np.float32)
+
+    torch.manual_seed(99)
+    fusion = CrossModalStateFusion(d_visual=128, d_tech=64, d_senti=32, d_model=128)
+    ens = DynamicRegimeEnsemble(
+        state_dim=128,
+        experts_per_regime=5,
+        rolling_sharpe_window_bars=24,
+        ppo_kwargs={"device": torch.device("cpu")},
+    )
+
+    with torch.no_grad():
+        st = fusion(
+            torch.from_numpy(concat_mods[:, :128]),
+            torch.from_numpy(concat_mods[:, 128:192]),
+            torch.from_numpy(concat_mods[:, 192:]),
+        ).numpy()
+
+    active_regimes = np.array([i % 3 for i in range(n_bars)], dtype=np.int64)
+    rets = rng.normal(0.0, 0.004, size=n_bars)
+    costs = np.full(n_bars, 0.0005)
+    _, chosen_actions, _ = ens.rollout_causal_policy(
+        states=st,
+        active_regimes=active_regimes,
+        bar_asset_returns=rets,
+        one_way_cost_rates=costs,
+        temperature=10.0,
+        num_experts_subset=5,
+    )
+    assert ens.last_rollout_expert_weights_ is not None
+
+    shares = []
+    for sd in (42, 43, 44):
+        res = compute_modality_group_shapley(
+            concat_modalities=concat_mods,
+            fusion_module=fusion,
+            ensemble=ens,
+            active_regimes=active_regimes,
+            chosen_actions=chosen_actions,
+            expert_weights=ens.last_rollout_expert_weights_,
+            num_experts_subset=5,
+            n_background=256,
+            n_explain=400,
+            seed=sd,
+            device=torch.device("cpu"),
+        )
+        assert np.isclose(res.visual_pct + res.tech_pct + res.sentiment_pct, 100.0, atol=1e-4)
+        assert np.isclose(res.tech_plus_sentiment_pct, res.tech_pct + res.sentiment_pct, atol=1e-5)
+        shares.append([res.visual_pct, res.tech_pct, res.sentiment_pct])
+
+    shares_arr = np.asarray(shares, dtype=np.float64)
+    seed_stds = np.std(shares_arr, axis=0, ddof=1)
+    assert np.all(seed_stds <= 2.0), f"3-seed std exceeded 2%p: {seed_stds}"
+
+    # Constant sentiment input must yield exact zero sentiment attribution
+    const_mods = concat_mods.copy()
+    const_mods[:, 192:] = const_mods[0:1, 192:]
+    res_const = compute_modality_group_shapley(
+        concat_modalities=const_mods,
+        fusion_module=fusion,
+        ensemble=ens,
+        active_regimes=active_regimes,
+        chosen_actions=chosen_actions,
+        expert_weights=ens.last_rollout_expert_weights_,
+        num_experts_subset=5,
+        n_background=128,
+        n_explain=128,
+        seed=42,
+        device=torch.device("cpu"),
+    )
+    assert abs(res_const.sentiment_pct) < 1e-6

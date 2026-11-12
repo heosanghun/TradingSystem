@@ -1,15 +1,17 @@
 """
-Dynamic Regime-Specialized PPO Ensemble (Ch. III Sec 4, Eqs. III.23–III.24).
+Dynamic Regime-Specialized PPO Ensemble (Chapter III Sec 4, Eqs. III.23-III.24).
 
-Manages `3 regimes × K experts` (trains up to `K_max = 7` experts per regime once
-so `K ∈ {3, 5, 7}` in Table 6.13 and `T ∈ {1, 5, 10, 20, 'static_1_over_N'}` in
-Table 6.12 can all be evaluated deterministically without post-hoc tampering!).
+Manages `3 regimes x K experts` (trains up to `K_max = 7` experts per regime once per fold
+so `K in {3, 5, 7}` in Table 6.13 and `T in {1, 5, 10, 20, 'static_1_over_N'}` in Table 6.12
+are evaluated on a shared set of trained experts).
 """
 
 from __future__ import annotations
 
+import json
 from collections import deque
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -19,10 +21,10 @@ from ts.study1.regime_labeling import REGIME_BEAR, REGIME_BULL, REGIME_SIDEWAYS
 
 class DynamicRegimeEnsemble:
     """
-    Implements Eqs. (III.23)–(III.24):
-      w_{i,t} = exp(SR_{i,K} / T) / Σ_{j=1}^M exp(SR_{j,K} / T)
-      π_ensemble(a | s_t) = Σ_{i=1}^M w_{i,t} π_i(a | s_t)
-      a_t^* = argmax_a π_ensemble(a | s_t)
+    Implements Eqs. (III.23)-(III.24):
+      w_{i,t} = exp(SR_{i,K} / T) / sum_{j=1}^M exp(SR_{j,K} / T)
+      pi_ensemble(a | s_t) = sum_{i=1}^M w_{i,t} pi_i(a | s_t)
+      a_t^* = argmax_a pi_ensemble(a | s_t)
     """
 
     def __init__(
@@ -39,6 +41,7 @@ class DynamicRegimeEnsemble:
         self.rolling_sharpe_window_bars = rolling_sharpe_window_bars
         self.bars_per_year = bars_per_year
         ppo_kwargs = ppo_kwargs or {}
+        self.last_rollout_expert_weights_: Optional[np.ndarray] = None
 
         self.pools: Dict[int, List[RegimePPOExpert]] = {}
         for r_id in (REGIME_BULL, REGIME_BEAR, REGIME_SIDEWAYS):
@@ -59,11 +62,18 @@ class DynamicRegimeEnsemble:
         next_bar_returns: np.ndarray,
         cost_rates: np.ndarray,
         total_rollouts: int = 8,
+        log_dir: Optional[Union[str, Path]] = None,
+        fold_id: Optional[int] = None,
+        tag_prefix: str = "",
     ) -> Dict[int, List[float]]:
         summary: Dict[int, List[float]] = {}
+        log_root = Path(log_dir) if log_dir is not None else None
+        if log_root is not None:
+            log_root.mkdir(parents=True, exist_ok=True)
+
         for r_id, experts in self.pools.items():
             mask = train_regimes == r_id
-            r_Trajectory: List[float] = []
+            r_trajectory: List[float] = []
             for exp in experts:
                 hist = exp.train_on_fold(
                     states=train_states,
@@ -72,8 +82,21 @@ class DynamicRegimeEnsemble:
                     regime_mask=mask,
                     total_rollouts=total_rollouts,
                 )
-                r_Trajectory.append(hist[-1] if hist else 0.0)
-            summary[r_id] = r_Trajectory
+                r_trajectory.append(hist[-1] if hist else 0.0)
+                if log_root is not None and hasattr(exp, "last_training_logs_"):
+                    prefix = f"{tag_prefix}_" if tag_prefix else ""
+                    f_str = f"fold{fold_id}_" if fold_id is not None else ""
+                    log_file = log_root / f"{prefix}{f_str}regime{r_id}_seed{exp.seed}.json"
+                    payload = {
+                        "fold_id": fold_id,
+                        "regime_id": int(r_id),
+                        "seed": int(exp.seed),
+                        "total_rollouts": int(total_rollouts),
+                        "matched_regime_bars": int(np.sum(mask)),
+                        "rollout_logs": exp.last_training_logs_,
+                    }
+                    log_file.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+            summary[r_id] = r_trajectory
         return summary
 
     @staticmethod
@@ -91,9 +114,9 @@ class DynamicRegimeEnsemble:
         if isinstance(temperature, str) or float(temperature) <= 0.0:
             return np.full(m, 1.0 / m, dtype=np.float64)
 
-        T = float(temperature)
+        t_val = float(temperature)
         sr_clipped = np.clip(np.asarray(rolling_sharpes, dtype=np.float64), -10.0, 10.0)
-        scaled = sr_clipped / T
+        scaled = sr_clipped / t_val
         scaled -= np.max(scaled)
         exp_s = np.exp(scaled)
         return exp_s / np.sum(exp_s)
@@ -112,18 +135,14 @@ class DynamicRegimeEnsemble:
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Causally evaluate the ensemble bar-by-bar on out-of-sample `states`, updating each
-        expert's trailing 720-bar counterfactual Sharpe ONLY AFTER bar `t`'s return is realized!
+        expert's trailing 720-bar counterfactual Sharpe only after bar `t`'s return is realized.
 
-        Supports:
-        - `temperature`: `1.0, 5.0, 10.0, 20.0, 'static_1_over_N'` (Table 6.12 & Variant B)
-        - `num_experts_subset`: `1` (Variant C), `3, 5, 7` (Table 6.13)
-
+        Also records per-bar Boltzmann expert weights `(N, m)` in `self.last_rollout_expert_weights_`.
         Returns `(ensemble_probs_n5, chosen_actions_n, target_weights_n)`.
         """
         m = min(num_experts_subset or self.experts_per_regime, self.experts_per_regime)
         sqrt_ann = float(np.sqrt(self.bars_per_year))
 
-        # Precompute each expert's action probabilities across warmup + test for speed
         hist_ret: Dict[Tuple[int, int], deque[float]] = {}
         prev_exp_w: Dict[Tuple[int, int], float] = {}
         for r_id in (REGIME_BULL, REGIME_BEAR, REGIME_SIDEWAYS):
@@ -148,7 +167,6 @@ class DynamicRegimeEnsemble:
                         pw = tw
                     prev_exp_w[(r_id, k)] = pw
 
-        # Batch-predict probabilities on test `states` for all experts
         expert_probs: Dict[Tuple[int, int], np.ndarray] = {}
         for r_id in (REGIME_BULL, REGIME_BEAR, REGIME_SIDEWAYS):
             for k in range(m):
@@ -158,10 +176,10 @@ class DynamicRegimeEnsemble:
         ens_probs = np.zeros((n, 5), dtype=np.float32)
         chosen_actions = np.zeros(n, dtype=np.int64)
         target_weights = np.zeros(n, dtype=np.float64)
+        exp_weights_log = np.zeros((n, m), dtype=np.float32)
 
         for t in range(n):
             r_t = int(active_regimes[t])
-            # 1. Compute trailing Sharpe strictly BEFORE seeing `bar_asset_returns[t]`
             srs = np.zeros(m, dtype=np.float64)
             for k in range(m):
                 buf = hist_ret[(r_t, k)]
@@ -173,6 +191,7 @@ class DynamicRegimeEnsemble:
                     srs[k] = 0.0
 
             w_k = self.compute_boltzmann_weights(srs, temperature=temperature)
+            exp_weights_log[t] = w_k.astype(np.float32)
             p_bar = np.zeros(5, dtype=np.float64)
             for k in range(m):
                 p_bar += w_k[k] * expert_probs[(r_t, k)][t]
@@ -183,7 +202,6 @@ class DynamicRegimeEnsemble:
             chosen_actions[t] = a_star
             target_weights[t] = ACTION_WEIGHTS[a_star]
 
-            # 2. After bar `t` executes, update counterfactual returns for all pools
             mkt_r = float(bar_asset_returns[t])
             c_rate = float(one_way_cost_rates[t])
             for r_id in (REGIME_BULL, REGIME_BEAR, REGIME_SIDEWAYS):
@@ -195,4 +213,5 @@ class DynamicRegimeEnsemble:
                     hist_ret[(r_id, k)].append(net_rk)
                     prev_exp_w[(r_id, k)] = tw_k
 
+        self.last_rollout_expert_weights_ = exp_weights_log
         return ens_probs, chosen_actions, target_weights
