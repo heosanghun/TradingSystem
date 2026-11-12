@@ -38,7 +38,7 @@
     "bear_sortino_window_bars": 24,
     "bear_dd_floor": 0.0001,
     "bear_cost_penalty": 1.0,
-    "sideways_turnover_penalty": 0.002,
+    "sideways_turnover_penalty": 0.05,
     "rolling_sharpe_window_bars": 720,
     "ensemble_temperature": 10.0,
     "experts_per_regime": 5,

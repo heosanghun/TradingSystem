@@ -55,7 +55,7 @@ class Study1PPOConfig:
     bear_sortino_window_bars: int = 24
     bear_dd_floor: float = 1e-4
     bear_cost_penalty: float = 1.0
-    sideways_turnover_penalty: float = 0.002
+    sideways_turnover_penalty: float = 0.05
     rolling_sharpe_window_bars: int = 720
     ensemble_temperature: float = 10.0
     experts_per_regime: int = 5
