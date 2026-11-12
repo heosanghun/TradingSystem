@@ -215,15 +215,24 @@ def build_daily_hypergraph(
     edge_week_cache: Optional[Dict[Tuple[str, str, str], Tuple[str, float, str]]] = None,
     iso_week_key: str = "",
     max_candidates: Optional[int] = None,
+    priority_target: Optional[str] = None,
 ) -> DynamicFinancialHypergraph:
     """
     Run LLM Edge Verifier over statistical candidate edges (with optional `(src, dst, iso_week)`
     weekly cache), compute Eq. (IV.5) hybrid edge weights, and construct
     `DynamicFinancialHypergraph`.
 
-    `max_candidates=K` sends only the K candidates with the largest normalized transfer
-    entropy to the verifier; the rest are dropped without being verified. This bounds the
-    LLM work per day and is not part of the thesis text, so a run that uses it must say so.
+    `max_candidates=K` sends only K candidates to the verifier; the rest are dropped
+    without being verified. This bounds the LLM work per day and is not part of the thesis
+    text, so a run that uses it must say so. The K are chosen by normalized transfer
+    entropy. If `priority_target` is given, candidates whose target is that asset are
+    taken first (by transfer entropy) and the remaining places are filled from the others.
+
+    Why the priority exists: exchange-traded funds have no bars outside US market hours,
+    so their hourly returns are zero at the same hours. Pairs of such assets get large
+    transfer-entropy estimates from that shared pattern, and with a plain top-K they fill
+    every place, leaving no edge that points at the traded asset. The debate decides the
+    position in one asset, so the edges into that asset are the ones it needs.
 
     The returned graph carries `verification_counts` with the number of statistical
     candidates, the number sent to the verifier, and the number accepted.
@@ -232,7 +241,10 @@ def build_daily_hypergraph(
     n_candidates = len(candidates)
     if max_candidates is not None and n_candidates > max_candidates:
         # Stable sort: ties keep discovery order, so the selection is deterministic.
-        candidates = sorted(candidates, key=lambda c: -c.te_norm)[: int(max_candidates)]
+        candidates = sorted(
+            candidates,
+            key=lambda c: (0 if priority_target and c.target == priority_target else 1, -c.te_norm),
+        )[: int(max_candidates)]
 
     for cand in candidates:
         cache_tuple = (cand.source, cand.target, iso_week_key)

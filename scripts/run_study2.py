@@ -5,8 +5,9 @@ Coverage options (all recorded in `metrics.json` and in the ledger run flags):
                            between carry the last debated decision forward.
   --counterfactual-every M run the evidence-removed debate on every M-th debated
                            out-of-sample bar (Table 6.15, decision change rate).
-  --edge-top-k K           send only the K candidates with the largest transfer entropy
-                           to the edge verifier each day (0 = all candidates).
+  --edge-top-k K           send only K candidates to the edge verifier each day
+                           (0 = all): edges into the traded asset first, then the rest,
+                           each group ordered by transfer entropy.
 With the defaults (1, 1, 0) every bar is debated as the thesis text describes.
 """
 
@@ -218,7 +219,8 @@ def main() -> None:
                             alpha=cfg.study2.edge_weight_alpha, max_hyperedges=cfg.study2.max_hyperedges,
                             edge_week_cache=edge_week_cache,
                             iso_week_key=f"{iso_cal.year}-W{iso_cal.week:02d}",
-                            max_candidates=edge_top_k)
+                            max_candidates=edge_top_k,
+                            priority_target=cfg.data.primary_symbol if edge_top_k else None)
                         day_store[day_str] = {"nodes": list(returns_60_df.columns),
                                               "edges": [asdict(e) for e in current_hg.simple_edges.values()],
                                               "verification_counts": current_hg.verification_counts}

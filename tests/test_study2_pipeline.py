@@ -508,6 +508,15 @@ def test_edge_verifier_top_k_and_counts() -> None:
     assert hg.verification_counts == {"candidates": 4, "sent_to_verifier": 2, "accepted": 2}
     assert set(hg.simple_edges) == {"E02", "E04"}
 
+    # Edges into the priority target are taken first, then the rest by transfer entropy.
+    mixed = [cand(1, 0.10), cand(2, 0.90), cand(3, 0.50)]
+    mixed[1] = dataclasses.replace(mixed[1], target="S9")
+    mixed[2] = dataclasses.replace(mixed[2], target="S9")
+    hg2 = build_daily_hypergraph(nodes=["BTCUSDT", "S1", "S2", "S3", "S9"], candidates=mixed,
+                                 llm_client=llm, news_context="n", max_candidates=2,
+                                 priority_target="BTCUSDT")
+    assert set(hg2.simple_edges) == {"E01", "E02"}
+
 
 def test_ollama_call_settings_and_truncation(monkeypatch) -> None:
     import ts.study2.llm_client as mod
