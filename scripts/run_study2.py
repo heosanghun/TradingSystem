@@ -1,4 +1,14 @@
-"""Run the hourly hypergraph teacher with explicit inputs and durable checkpoints."""
+"""Run the hourly hypergraph teacher with explicit inputs and durable checkpoints.
+
+Coverage options (all recorded in `metrics.json` and in the ledger run flags):
+  --debate-stride N        debate every N-th bar of the teacher timeline; the bars in
+                           between carry the last debated decision forward.
+  --counterfactual-every M run the evidence-removed debate on every M-th debated
+                           out-of-sample bar (Table 6.15, decision change rate).
+  --edge-top-k K           send only the K candidates with the largest transfer entropy
+                           to the edge verifier each day (0 = all candidates).
+With the defaults (1, 1, 0) every bar is debated as the thesis text describes.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +16,7 @@ import argparse
 import json
 import hashlib
 import logging
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -17,10 +28,10 @@ from ts.config import DEFAULT_CONFIG_PATH, PROJECT_ROOT, SystemConfig
 from ts.data.binance_fetcher import BinanceDataFetcher
 from ts.data.macro_fetcher import MacroAssetFetcher
 from ts.data.news_fetcher import PointInTimeNewsStore
-from ts.eval.latency_benchmark import benchmark_student_and_teacher_latency
+from ts.eval.latency_benchmark import benchmark_staged_pipeline
 from ts.ledger import NumberLedger, RunContext
 from ts.study1.regime_labeling import REGIME_NAMES
-from ts.study2.causality import discover_candidate_edges_cached
+from ts.study2.causality import discover_candidate_edges, discover_candidate_edges_cached
 from ts.study2.citation_verifier import CitationVerificationStats, CitationVerifier
 from ts.study2.debate import GroundedDebateEngine
 from ts.study2.hypergraph import DynamicFinancialHypergraph, VerifiedSimpleEdge, build_daily_hypergraph
@@ -34,15 +45,27 @@ def main() -> None:
     parser.add_argument("--llm-backend", type=str, default="openai_compat", choices=["openai_compat", "ollama", "deterministic_econometric"])
     parser.add_argument("--llm-endpoint", type=str, default="http://localhost:8000/v1/chat/completions")
     parser.add_argument("--llm-model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B")
-    parser.add_argument("--news-file", type=str, default="")
-    parser.add_argument("--counterfactual-stride", type=int, default=1, help="Run strip_evidence counterfactual every N bars (1 = all bars).")
+    default_news = PROJECT_ROOT / "data" / "news_headlines.parquet"
+    parser.add_argument("--news-file", type=str, default=str(default_news) if default_news.exists() else "")
     parser.add_argument("--debate-stride", type=int, default=1)
+    parser.add_argument("--counterfactual-every", type=int, default=1,
+                        help="Evidence-removed debate on every M-th debated out-of-sample bar.")
+    parser.add_argument("--edge-top-k", type=int, default=0,
+                        help="Verify only the K largest-TE candidates per day (0 = all).")
+    parser.add_argument("--latency-bars", type=int, default=50,
+                        help="Distinct out-of-sample bars used for the teacher latency measurement.")
+    parser.add_argument("--ollama-num-ctx", type=int, default=4096)
+    parser.add_argument("--llm-timeout-sec", type=int, default=120)
+    parser.add_argument("--max-bars", type=int, default=0,
+                        help="Diagnostic runs only: stop after this many timeline bars.")
     parser.add_argument("--diagnostic-run", action="store_true")
     args = parser.parse_args()
-    if args.debate_stride < 1 or args.counterfactual_stride < 1:
-        parser.error("Strides must be positive")
-    if args.debate_stride != 1 and not args.diagnostic_run:
-        parser.error("Reduced debate coverage requires a diagnostic run until D-4 is resolved")
+    if args.debate_stride < 1 or args.counterfactual_every < 1 or args.edge_top_k < 0:
+        parser.error("Strides must be positive and --edge-top-k nonnegative")
+    if args.max_bars and not args.diagnostic_run:
+        parser.error("--max-bars is only allowed together with --diagnostic-run")
+    edge_top_k = args.edge_top_k or None
+    cf_period = args.debate_stride * args.counterfactual_every
 
     cfg = SystemConfig.from_json(args.config)
     cache_dir = PROJECT_ROOT / "data" / "cache"
@@ -103,6 +126,11 @@ def main() -> None:
             is_oos_mask = np.ones(len(target_bar_indices), dtype=bool)
     else:
         raise FileNotFoundError("Study 1 teacher timeline is required; refusing uniform substitute signals")
+    if args.max_bars:
+        # Diagnostic: keep the tail of the timeline so that out-of-sample bars are included.
+        keep = slice(len(target_bar_indices) - args.max_bars, None)
+        target_bar_indices, bar_regimes = target_bar_indices[keep], bar_regimes[keep]
+        bar_probs, is_oos_mask = bar_probs[keep], is_oos_mask[keep]
 
     llm = LLMClient(
         backend=args.llm_backend,
@@ -111,6 +139,8 @@ def main() -> None:
         temperature=cfg.study2.llm_temperature,
         max_tokens=cfg.study2.llm_max_tokens,
         cache_db_path=cache_dir / "llm_cache.sqlite",
+        timeout_sec=args.llm_timeout_sec,
+        ollama_num_ctx=args.ollama_num_ctx,
     )
     verifier = CitationVerifier(te_tolerance=cfg.study2.te_citation_tolerance)
     debate_engine = GroundedDebateEngine(
@@ -126,7 +156,8 @@ def main() -> None:
     identity = hashlib.sha256()
     identity.update(cfg.config_sha256.encode())
     identity.update(json.dumps([args.llm_backend, args.llm_endpoint, args.llm_model,
-                                args.debate_stride, args.counterfactual_stride,
+                                args.debate_stride, args.counterfactual_every, args.edge_top_k,
+                                args.ollama_num_ctx, args.max_bars,
                                 args.diagnostic_run], sort_keys=True).encode())
     identity.update(s1_file.read_bytes())
     identity.update(pd.util.hash_pandas_object(returns_60_df, index=True).values.tobytes())
@@ -150,8 +181,9 @@ def main() -> None:
     cf_stripped_acts = []
     failed_bars = []
     totals = CitationVerificationStats()
-    oos_counter = 0
     previous_record = None
+    t_loop = time.time()
+    n_fresh = 0
 
     for pos_i, bar_idx in enumerate(target_bar_indices):
         is_oos_bar = bool(is_oos_mask[pos_i])
@@ -185,9 +217,11 @@ def main() -> None:
                             news_context=news_store.format_headlines_for_llm(bar_ts, lookback_hours=24.),
                             alpha=cfg.study2.edge_weight_alpha, max_hyperedges=cfg.study2.max_hyperedges,
                             edge_week_cache=edge_week_cache,
-                            iso_week_key=f"{iso_cal.year}-W{iso_cal.week:02d}")
+                            iso_week_key=f"{iso_cal.year}-W{iso_cal.week:02d}",
+                            max_candidates=edge_top_k)
                         day_store[day_str] = {"nodes": list(returns_60_df.columns),
-                                              "edges": [asdict(e) for e in current_hg.simple_edges.values()]}
+                                              "edges": [asdict(e) for e in current_hg.simple_edges.values()],
+                                              "verification_counts": current_hg.verification_counts}
                     current_day_str = day_str
                 record = run_checkpointed_bar(
                     bar_store, pos_i, debate_engine,
@@ -196,7 +230,14 @@ def main() -> None:
                              bar_ts + pd.Timedelta(hours=1), lookback_hours=6.),
                          study1_regime_name=REGIME_NAMES.get(int(bar_regimes[pos_i]), "Sideways"),
                          study1_probs=bar_probs[pos_i], target_asset=cfg.data.primary_symbol),
-                    counterfactual=is_oos_bar and oos_counter % args.counterfactual_stride == 0)
+                    counterfactual=is_oos_bar and pos_i % cf_period == 0)
+                n_fresh += 1
+                if n_fresh % 50 == 0:
+                    rate = (time.time() - t_loop) / n_fresh
+                    remaining = sum(1 for j in range(pos_i + 1, n_target) if j % args.debate_stride == 0)
+                    print(f"[Study 2] bar {pos_i + 1}/{n_target} ({bar_ts:%Y-%m-%d %H:%M}) "
+                          f"{rate:.1f}s per debated bar, about {remaining * rate / 3600.0:.1f}h left, "
+                          f"failed={len(failed_bars)}", flush=True)
             except LLMCallError as exc:
                 logging.getLogger(__name__).error("Teacher graph failed at %s: %s", bar_ts, exc)
                 record = {"status": "failed", "stage": "hypergraph", "error": str(exc), "stats_delta": {}}
@@ -218,7 +259,6 @@ def main() -> None:
             for name, delta in record.get("stats_delta", {}).items():
                 setattr(totals, name, getattr(totals, name) + delta)
             totals.rejection_reasons.extend(record.get("rejection_reasons", []))
-            oos_counter += 1
     verifier.stats = totals
     if failed_bars:
         payload = dict(config_sha256=cfg.config_sha256, run_id=run_id, status="incomplete",
@@ -230,43 +270,78 @@ def main() -> None:
         # for the student to silently treat as cash/neutral training examples.
         raise RuntimeError(f"{len(failed_bars)} teacher bars failed; inspect {out_dir / 'metrics.json'}")
 
-    # Snapshot Table 6.15 OOS citation & hallucination telemetry BEFORE synthetic latency benchmark!
+    # Table 6.15 counts are taken before the latency measurement adds its own calls.
     cite_match_pct = verifier.stats.citation_match_rate * 100.0
     halluc_rej_pct = verifier.stats.hallucination_rejection_rate * 100.0
     cf_g = np.asarray(cf_grounded_acts, dtype=np.int64)
     cf_s = np.asarray(cf_stripped_acts, dtype=np.int64)
     flip_rate_pct = float(np.mean(cf_g != cf_s)) * 100.0 if len(cf_g) > 0 else 0.0
 
-    # Benchmark direct Teacher inference latency (Table 6.14 Teacher row)
-    last_day = pd.Timestamp(df_all.index[target_bar_indices[-1]]).strftime("%Y-%m-%d")
-    if current_hg is None or current_day_str != last_day:
-        saved = day_store[last_day]
-        current_hg = DynamicFinancialHypergraph(nodes=saved["nodes"],
-            simple_edges=[VerifiedSimpleEdge(**row) for row in saved["edges"]],
+    # Teacher latency (Table 6.14): one full decision on distinct out-of-sample bars, cache off.
+    # Stages follow the description under the table. The edge verifier is not part of a
+    # per-bar decision (it runs once a day); its counts are reported separately below.
+    def _stored_graph(day: str) -> DynamicFinancialHypergraph:
+        saved = day_store[day]
+        return DynamicFinancialHypergraph(
+            nodes=saved["nodes"], simple_edges=[VerifiedSimpleEdge(**row) for row in saved["edges"]],
             max_hyperedges=cfg.study2.max_hyperedges)
-    sample_hg = current_hg
+
+    def _day_of(pos: int) -> str:
+        return pd.Timestamp(df_all.index[target_bar_indices[pos]]).strftime("%Y-%m-%d")
+
+    oos_debated = [int(i) for i in range(n_target)
+                   if is_oos_mask[i] and i % args.debate_stride == 0 and _day_of(i) in day_store]
+    rng = np.random.default_rng(20261112)
+    n_lat = min(args.latency_bars, len(oos_debated))
+    lat_items = sorted(int(x) for x in rng.choice(oos_debated, size=n_lat, replace=False)) if n_lat >= 2 else []
+
+    def _stage_news(pos: int, carry: dict) -> str:
+        ts = pd.Timestamp(df_all.index[target_bar_indices[pos]])
+        return news_store.format_headlines_for_llm(ts + pd.Timedelta(hours=1), lookback_hours=6.)
+
+    def _stage_te(pos: int, carry: dict) -> int:
+        b = int(target_bar_indices[pos])
+        return len(discover_candidate_edges(
+            returns_60_df.iloc[max(0, b - rolling_bars):b],
+            granger_lag=cfg.study2.granger_lag_bars, granger_p_threshold=cfg.study2.granger_p_threshold,
+            te_lag=cfg.study2.te_lag_bars, te_top_quantile=cfg.study2.te_top_quantile))
+
+    def _stage_graph(pos: int, carry: dict) -> DynamicFinancialHypergraph:
+        return _stored_graph(_day_of(pos))
+
+    def _stage_debate(pos: int, carry: dict):
+        return debate_engine.run_bar_debate(
+            hypergraph=carry["GRAPH"], news_headlines_text=carry["NEWS"],
+            study1_regime_name=REGIME_NAMES.get(int(bar_regimes[pos]), "Sideways"),
+            study1_probs=bar_probs[pos], target_asset=cfg.data.primary_symbol)
+
     latency_failure = None
+    lat_report = None
     previous_cache_mode = llm.use_cache
+    stats_before_latency = verifier.stats
+    verifier.stats = CitationVerificationStats()   # keep Table 6.15 counts free of benchmark calls
+    telemetry_before_latency = dict(llm.telemetry)
     llm.use_cache = False
     try:
-        lat_report = benchmark_student_and_teacher_latency(
-            student_model=None,
-            teacher_step_fn=lambda: debate_engine.run_bar_debate(
-                hypergraph=sample_hg,
-                news_headlines_text="Benchmark headline check.",
-                study1_regime_name="Bear",
-                study1_probs=np.array([0.3, 0.3, 0.2, 0.1, 0.1], dtype=np.float32),
-                strip_evidence=False,
-            ),
-            n_student_runs=1000,
-            n_teacher_runs=20,
-        )
-    except LLMCallError as exc:
-        logging.getLogger(__name__).error("Teacher latency benchmark failed: %s", exc)
-        lat_report = None
-        latency_failure = str(exc)
+        if lat_items:
+            lat_report = benchmark_staged_pipeline(
+                {"NEWS": _stage_news, "TE": _stage_te, "GRAPH": _stage_graph, "DEBATE": _stage_debate},
+                lat_items, device_name="local Ollama server")
+            if lat_report.total.n_runs == 0:
+                latency_failure = "every latency item failed"
+                lat_report = None
+        else:
+            latency_failure = "fewer than two debated out-of-sample bars"
     finally:
         llm.use_cache = previous_cache_mode
+        verifier.stats = stats_before_latency
+
+    verification_days = [day_store[d].get("verification_counts") for d in day_store]
+    verification_days = [v for v in verification_days if v]
+    edge_totals = {k: int(sum(v[k] for v in verification_days)) for k in ("candidates", "sent_to_verifier", "accepted")}
+    edge_totals["days"] = len(verification_days)
+    edge_totals["note"] = ("per-day counts; a pair verified once in an ISO week is reused on the other "
+                           "days of that week, so sent_to_verifier counts decisions used, not LLM calls")
 
     np.savez_compressed(
         out_dir / "teacher_signals.npz",
@@ -290,7 +365,23 @@ def main() -> None:
         "universe": macro_fetcher.last_universe_report,
         "n_failed_bars": 0,
         "debate_stride": args.debate_stride,
-        "counterfactual_stride": args.counterfactual_stride,
+        "counterfactual_every": args.counterfactual_every,
+        "edge_top_k": args.edge_top_k,
+        "ollama_num_ctx": args.ollama_num_ctx,
+        "n_assets": int(returns_60_df.shape[1]),
+        "n_debated_oos_bars": len(oos_debated),
+        "n_counterfactual_pairs": int(len(cf_g)),
+        "edge_verification": edge_totals,
+        "citation_checks_oos": {
+            "agent_outputs": totals.total_agent_outputs,
+            "rejected": totals.rejected_agent_outputs,
+            "rejected_missing_citation": totals.rejected_missing_citation,
+            "rejected_unknown_id": totals.rejected_unknown_id,
+            "rejected_value_mismatch": totals.rejected_value_mismatch,
+            "consensus_citations": totals.total_consensus_citations,
+            "consensus_citations_matched": totals.matched_consensus_citations,
+        },
+        "llm_telemetry_before_latency": telemetry_before_latency,
         "llm_telemetry": dict(llm.telemetry),
         "llm_telemetry_scope": "current process only; persisted historical calls excluded",
         "diagnostic_run": args.diagnostic_run,
@@ -306,9 +397,16 @@ def main() -> None:
 
     if not args.diagnostic_run and lat_report is not None:
         ledger = NumberLedger(run_context=RunContext(stage="study2", flags={
-            "llm_simulated": llm.is_simulated_llm, "quick_verify": False}))
+            "llm_simulated": llm.is_simulated_llm, "quick_verify": False,
+            "debate_stride": args.debate_stride, "counterfactual_every": args.counterfactual_every,
+            "edge_top_k": args.edge_top_k, "n_assets": int(returns_60_df.shape[1])}))
         rec_kw = dict(script_path=script_rel, config_sha256=cfg.config_sha256, run_log_path=log_path)
-        ledger.record("T6.14_TEACHER_MEAN_MS", "Table 6.14", "Teacher direct inference latency mean", lat_report.teacher_direct.mean_ms, "{:.1f}", "ms", **rec_kw)
+        ledger.record("T6.14_TEACHER_MEAN_MS", "Table 6.14", "Teacher decision latency mean", lat_report.total.mean_ms, "{:.1f}", "ms", **rec_kw)
+        ledger.record("T6.14_TEACHER_MEDIAN_MS", "Table 6.14", "Teacher decision latency median", lat_report.total.median_ms, "{:.1f}", "ms", **rec_kw)
+        ledger.record("T6.14_TEACHER_P99_MS", "Table 6.14", "Teacher decision latency p99", lat_report.total.p99_ms, "{:.1f}", "ms", **rec_kw)
+        for stage_name, stage_stats in lat_report.stages.items():
+            ledger.record(f"T6.14_TEACHER_{stage_name}_MEAN_MS", "Table 6.14", f"Teacher stage {stage_name} latency mean",
+                          stage_stats.mean_ms, "{:.1f}", "ms", **rec_kw)
         ledger.record("T6.15_CITATION_MATCH_PCT", "Table 6.15", "Citation Match Rate", cite_match_pct, "{:.2f}", "%", **rec_kw)
         ledger.record("T6.15_HALLUCINATION_REJECT_PCT", "Table 6.15", "Hallucination Rejection Rate", halluc_rej_pct, "{:.2f}", "%", **rec_kw)
         ledger.record("T6.15_EVIDENCE_FLIP_PCT", "Table 6.15", "Counterfactual Evidence Removal Flip Rate", flip_rate_pct, "{:.2f}", "%", **rec_kw)

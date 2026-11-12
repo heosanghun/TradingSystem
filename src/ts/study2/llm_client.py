@@ -27,6 +27,11 @@ from typing import Any, Dict, Optional
 import requests
 
 
+# DeepSeek-R1 always opens its answer with a reasoning block and Ollama's `think=False`
+# does not switch it off for this model. Sending this text as the start of the assistant
+# turn closes the block immediately, so the token budget goes to the JSON answer.
+EMPTY_THINK_PREFILL = "<think>" + chr(10) * 2 + "</think>" + chr(10) * 2
+
 THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", flags=re.DOTALL | re.IGNORECASE)
 JSON_OBJ_RE = re.compile(r"\{.*\}", flags=re.DOTALL)
 LOGGER = logging.getLogger(__name__)
@@ -95,6 +100,8 @@ class LLMClient:
         timeout_sec: int = 60,
         max_request_attempts: int = 3,
         retry_backoff_sec: float = 1.0,
+        ollama_num_ctx: int = 4096,
+        skip_thinking: bool = True,
     ) -> None:
         self.backend = backend
         self.model_name = model_name
@@ -106,6 +113,10 @@ class LLMClient:
             raise ValueError("Retry attempts must be positive and backoff nonnegative")
         self.max_request_attempts = max_request_attempts
         self.retry_backoff_sec = retry_backoff_sec
+        # Ollama's default context (32k for this model) does not fit in 24 GB next to the
+        # weights and spills layers to the CPU. The longest project prompt is under 2k tokens.
+        self.ollama_num_ctx = int(ollama_num_ctx)
+        self.skip_thinking = bool(skip_thinking)
         self.telemetry = Counter()
         self.use_cache = True
         self.is_simulated_llm = backend == "deterministic_econometric"
@@ -195,7 +206,8 @@ class LLMClient:
     ) -> Dict[str, Any]:
         key_src = json.dumps([self.backend, self.endpoint_url, self.model_name, role,
                               retry_attempt, self.temperature, self.max_tokens,
-                              system_prompt, user_prompt, context_hint if self.is_simulated_llm else None],
+                              system_prompt, user_prompt, context_hint if self.is_simulated_llm else None,
+                              [self.ollama_num_ctx, self.skip_thinking] if self.backend == "ollama" else None],
                              sort_keys=True)
         cache_key = hashlib.sha256(key_src.encode("utf-8")).hexdigest()
 
@@ -234,25 +246,42 @@ class LLMClient:
             parsed = extract_json_object(text)
         elif self.backend == "ollama":
             self.telemetry["http_calls"] += 1
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+            if self.skip_thinking:
+                messages.append({"role": "assistant", "content": EMPTY_THINK_PREFILL})
+            t_call = time.perf_counter()
             resp = requests.post(
                 self.endpoint_url,
                 json={
                     "model": self.model_name,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "format": "json",
+                    "messages": messages,
                     "stream": False,
+                    "think": False,
                     "options": {
                         "temperature": self.temperature + 0.05 * retry_attempt,
                         "num_predict": self.max_tokens,
+                        "num_ctx": self.ollama_num_ctx,
                     },
                 },
                 timeout=self.timeout_sec,
             )
             resp.raise_for_status()
-            text = resp.json()["message"]["content"]
+            body = resp.json()
+            self.telemetry["http_ms"] += int((time.perf_counter() - t_call) * 1000.0)
+            self.telemetry["output_tokens"] += int(body.get("eval_count", 0) or 0)
+            self.telemetry["prompt_tokens"] += int(body.get("prompt_eval_count", 0) or 0)
+            if int(body.get("prompt_eval_count", 0) or 0) + self.max_tokens > self.ollama_num_ctx:
+                # The server silently drops the start of a prompt that does not fit.
+                self.telemetry["context_overflows"] += 1
+                raise ValueError("Prompt plus answer budget does not fit in the context window")
+            if body.get("done_reason") == "length":
+                # The answer hit the token limit. A cut-off JSON object is not an answer.
+                self.telemetry["truncated_responses"] += 1
+                raise ValueError("Response truncated at the output token limit")
+            text = body["message"]["content"]
             parsed = extract_json_object(text)
         elif self.backend == "deterministic_econometric":
             parsed = self._deterministic_econometric_response(role, context_hint or {})

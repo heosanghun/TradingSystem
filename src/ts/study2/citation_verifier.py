@@ -1,10 +1,26 @@
 """
 Programmatic Citation Verifier & Hallucination Rejector (Ch. IV Sec 4.1 & Table 6.15).
 
-Parses `[Edge ID: #EXX]` / `[Edge #EXX]` / `[Hyperedge ID: #HXX]` and optional
-`TE: 0.XXXX` values from LLM JSON rationales, cross-checks them against `H_t`,
+Reads edge citations from LLM JSON rationales, cross-checks them against `H_t`,
 rejects fabricated IDs or mismatched TE scores, and accumulates telemetry
-for Table 6.15:
+for Table 6.15.
+
+Two notations are read as citations:
+  - bracketed, as the prompt asks: `[Edge ID: #E01, TE: 0.3412]`, `[Edge #E01]`,
+    `[Hyperedge ID: #H02]`
+  - bare identifiers of the form the pipeline issues (`E` or `H` followed by digits,
+    or `H_GLOBAL`), with a `TE: 0.XXXX` value if one follows before the next identifier:
+    `E02 (ETHUSDT -> BTCUSDT, TE: 0.4537)`
+The model was measured to use the second form in most answers (T-205). The check itself
+is the same for both: the identifier must exist in `H_t` and a quoted TE must match.
+
+A rejection is recorded under one of three reasons, so that a missing citation is not
+counted as a fabricated one:
+  - `missing`: no citation although edges were available
+  - `unknown_id`: an identifier that is not in `H_t`
+  - `value_mismatch`: a known identifier quoted with a wrong TE or weight
+
+Table 6.15 rows:
   1. `인용 정합률 (Citation Match Rate)`
   2. `환각 기각률 (Hallucination Rejection Rate)`
 """
@@ -26,18 +42,29 @@ CITATION_PATTERN = re.compile(
 )
 
 
+# Bare identifiers as issued by `causality.py` (`E01`) and `hypergraph.py` (`H01`, `H_GLOBAL`).
+BARE_ID_PATTERN = re.compile(r"(?<![A-Za-z0-9_])#?(H_GLOBAL|[EH][0-9]{1,4})(?![A-Za-z0-9_])")
+TE_VALUE_PATTERN = re.compile(r"TE\s*[=:]?\s*([0-9]*\.?[0-9]+)", flags=re.IGNORECASE)
+# A TE value is attached to a bare identifier only if it follows within this many characters.
+BARE_TE_LOOKAHEAD_CHARS = 80
+
+
 @dataclass
 class CitationCheckResult:
     is_valid: bool
     cited_ids: List[str]
     matched_ids: List[str]
     reason: str = ""
+    category: str = ""
 
 
 @dataclass
 class CitationVerificationStats:
     total_agent_outputs: int = 0
     rejected_agent_outputs: int = 0
+    rejected_missing_citation: int = 0
+    rejected_unknown_id: int = 0
+    rejected_value_mismatch: int = 0
     total_consensus_citations: int = 0
     matched_consensus_citations: int = 0
     rejection_reasons: List[str] = field(default_factory=list)
@@ -66,13 +93,38 @@ class CitationVerifier:
 
     @staticmethod
     def extract_citations(text: str) -> List[Tuple[str, float | None]]:
-        out: List[Tuple[str, float | None]] = []
-        for m in CITATION_PATTERN.finditer(text or ""):
-            eid = m.group(1).strip()
+        """Citations in order of appearance, each identifier position counted once."""
+        text = text or ""
+        found: List[Tuple[int, str, float | None]] = []
+        covered: List[Tuple[int, int]] = []
+        for m in CITATION_PATTERN.finditer(text):
             te_str = m.group(2)
-            te_val = float(te_str) if te_str is not None else None
-            out.append((eid, te_val))
-        return out
+            found.append((m.start(), m.group(1).strip(), float(te_str) if te_str is not None else None))
+            covered.append((m.start(), m.end()))
+
+        bare = [m for m in BARE_ID_PATTERN.finditer(text)
+                if not any(a <= m.start() < b for a, b in covered)]
+        for i, m in enumerate(bare):
+            limit = min(len(text), m.end() + BARE_TE_LOOKAHEAD_CHARS)
+            if i + 1 < len(bare):
+                limit = min(limit, bare[i + 1].start())
+            for a, _b in covered:
+                if a > m.end():
+                    limit = min(limit, a)
+            te_m = TE_VALUE_PATTERN.search(text, m.end(), limit)
+            found.append((m.start(), m.group(1), float(te_m.group(1)) if te_m else None))
+
+        found.sort(key=lambda item: item[0])
+        return [(eid, te) for _pos, eid, te in found]
+
+    def _reject(self, category: str, reason: str, cited: List[str], matched: List[str],
+                record_in_stats: bool) -> CitationCheckResult:
+        if record_in_stats:
+            self.stats.rejected_agent_outputs += 1
+            counter = f"rejected_{category}"
+            setattr(self.stats, counter, getattr(self.stats, counter) + 1)
+            self.stats.rejection_reasons.append(reason)
+        return CitationCheckResult(False, cited, matched, reason, category)
 
     def verify_agent_rationale(
         self,
@@ -89,11 +141,9 @@ class CitationVerifier:
 
         if not citations:
             if require_at_least_one_if_nonempty and has_simple_edges:
-                reason = "Missing mandatory [Edge ID: #XX] citation despite non-empty hypergraph."
-                if record_in_stats:
-                    self.stats.rejected_agent_outputs += 1
-                    self.stats.rejection_reasons.append(reason)
-                return CitationCheckResult(False, [], [], reason)
+                return self._reject("missing_citation",
+                                    "Missing mandatory edge citation despite non-empty hypergraph.",
+                                    [], [], record_in_stats)
             return CitationCheckResult(True, [], [], "No edges available to cite.")
 
         cited_ids: List[str] = []
@@ -103,31 +153,23 @@ class CitationVerifier:
             if raw_id in hypergraph.simple_edges:
                 edge = hypergraph.simple_edges[raw_id]
                 if cited_te is not None and abs(cited_te - edge.te_norm) > self.te_tolerance:
-                    reason = (
-                        f"TE mismatch on {raw_id}: cited {cited_te:.4f} vs actual {edge.te_norm:.4f}"
-                    )
-                    if record_in_stats:
-                        self.stats.rejected_agent_outputs += 1
-                        self.stats.rejection_reasons.append(reason)
-                    return CitationCheckResult(False, cited_ids, matched_ids, reason)
+                    return self._reject(
+                        "value_mismatch",
+                        f"TE mismatch on {raw_id}: cited {cited_te:.4f} vs actual {edge.te_norm:.4f}",
+                        cited_ids, matched_ids, record_in_stats)
                 matched_ids.append(raw_id)
             elif raw_id in hypergraph.hyperedge_map:
                 he = hypergraph.hyperedge_map[raw_id]
                 if cited_te is not None and abs(cited_te - he.weight) > self.te_tolerance:
-                    reason = (
-                        f"Hyperedge weight mismatch on {raw_id}: cited {cited_te:.4f} vs actual {he.weight:.4f}"
-                    )
-                    if record_in_stats:
-                        self.stats.rejected_agent_outputs += 1
-                        self.stats.rejection_reasons.append(reason)
-                    return CitationCheckResult(False, cited_ids, matched_ids, reason)
+                    return self._reject(
+                        "value_mismatch",
+                        f"Hyperedge weight mismatch on {raw_id}: cited {cited_te:.4f} vs actual {he.weight:.4f}",
+                        cited_ids, matched_ids, record_in_stats)
                 matched_ids.append(raw_id)
             else:
-                reason = f"Hallucinated non-existent Edge/Hyperedge ID: {raw_id}"
-                if record_in_stats:
-                    self.stats.rejected_agent_outputs += 1
-                    self.stats.rejection_reasons.append(reason)
-                return CitationCheckResult(False, cited_ids, matched_ids, reason)
+                return self._reject("unknown_id",
+                                    f"Hallucinated non-existent Edge/Hyperedge ID: {raw_id}",
+                                    cited_ids, matched_ids, record_in_stats)
 
         return CitationCheckResult(True, cited_ids, matched_ids, "OK")
 

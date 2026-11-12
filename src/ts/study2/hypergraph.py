@@ -214,13 +214,25 @@ def build_daily_hypergraph(
     max_hyperedges: int = 20,
     edge_week_cache: Optional[Dict[Tuple[str, str, str], Tuple[str, float, str]]] = None,
     iso_week_key: str = "",
+    max_candidates: Optional[int] = None,
 ) -> DynamicFinancialHypergraph:
     """
     Run LLM Edge Verifier over statistical candidate edges (with optional `(src, dst, iso_week)`
-    cache from `구현계획_261111.md` Sec 6.3 WP3), compute Eq. (IV.5) hybrid edge weights,
-    and construct `DynamicFinancialHypergraph`.
+    weekly cache), compute Eq. (IV.5) hybrid edge weights, and construct
+    `DynamicFinancialHypergraph`.
+
+    `max_candidates=K` sends only the K candidates with the largest normalized transfer
+    entropy to the verifier; the rest are dropped without being verified. This bounds the
+    LLM work per day and is not part of the thesis text, so a run that uses it must say so.
+
+    The returned graph carries `verification_counts` with the number of statistical
+    candidates, the number sent to the verifier, and the number accepted.
     """
     verified: List[VerifiedSimpleEdge] = []
+    n_candidates = len(candidates)
+    if max_candidates is not None and n_candidates > max_candidates:
+        # Stable sort: ties keep discovery order, so the selection is deterministic.
+        candidates = sorted(candidates, key=lambda c: -c.te_norm)[: int(max_candidates)]
 
     for cand in candidates:
         cache_tuple = (cand.source, cand.target, iso_week_key)
@@ -266,8 +278,14 @@ def build_daily_hypergraph(
                 )
             )
 
-    return DynamicFinancialHypergraph(
+    graph = DynamicFinancialHypergraph(
         nodes=nodes,
         simple_edges=verified,
         max_hyperedges=max_hyperedges,
     )
+    graph.verification_counts = {
+        "candidates": int(n_candidates),
+        "sent_to_verifier": int(len(candidates)),
+        "accepted": int(len(verified)),
+    }
+    return graph
