@@ -143,3 +143,88 @@ def benchmark_student_and_teacher_latency(
         teacher_direct=teacher_stats,
         speedup_ratio=float(speedup),
     )
+
+
+@dataclass
+class StagedLatencyReport:
+    """Latency of a multi-stage pipeline measured over distinct inputs."""
+
+    total: LatencyStatsMs
+    stages: Dict[str, LatencyStatsMs]
+    n_failed_items: int
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "total": self.total.to_dict(),
+            "stages": {name: st.to_dict() for name, st in self.stages.items()},
+            "n_failed_items": self.n_failed_items,
+        }
+
+
+def _stats_ms(times_ms: np.ndarray, device_name: str) -> LatencyStatsMs:
+    n = int(len(times_ms))
+    if n == 0:
+        return LatencyStatsMs(0, 0.0, 0.0, 0.0, 0.0, 0.0, device_name)
+    return LatencyStatsMs(
+        n_runs=n,
+        mean_ms=float(np.mean(times_ms)),
+        median_ms=float(np.median(times_ms)),
+        p95_ms=float(np.percentile(times_ms, 95.0)),
+        p99_ms=float(np.percentile(times_ms, 99.0)),
+        std_ms=float(np.std(times_ms, ddof=1)) if n > 1 else 0.0,
+        device_name=device_name,
+    )
+
+
+def benchmark_staged_pipeline(
+    stage_fns: "Dict[str, Callable[[object, Dict[str, object]], object]]",
+    items: "list",
+    device_name: str = "",
+    min_distinct_items: int = 2,
+) -> StagedLatencyReport:
+    """
+    Time each stage of a pipeline once per item (Table 6.14, teacher row).
+
+    `stage_fns` maps a stage name to `fn(item, carry)`. Stages run in insertion order for
+    each item; `carry` is a dict shared by the stages of one item, and each stage's return
+    value is stored in it under the stage name so later stages can use it.
+
+    Each item is processed exactly once, so a response cache keyed on the input cannot
+    shorten the measurement as long as the items differ. The caller is still responsible
+    for switching such a cache off. Items must be distinct; repeated items are rejected.
+
+    An item whose stage raises is counted in `n_failed_items` and left out of the
+    statistics. Nothing is substituted for it.
+    """
+    if len(items) < min_distinct_items:
+        raise ValueError(f"need at least {min_distinct_items} items, got {len(items)}")
+    keys = [repr(it) for it in items]
+    if len(set(keys)) != len(keys):
+        raise ValueError("items must be distinct: repeated inputs can hit a response cache")
+    if not stage_fns:
+        raise ValueError("stage_fns is empty")
+
+    names = list(stage_fns.keys())
+    per_stage: Dict[str, list] = {name: [] for name in names}
+    totals: list = []
+    n_failed = 0
+    for item in items:
+        carry: Dict[str, object] = {}
+        elapsed: Dict[str, float] = {}
+        try:
+            for name in names:
+                t0 = time.perf_counter()
+                carry[name] = stage_fns[name](item, carry)
+                elapsed[name] = (time.perf_counter() - t0) * 1000.0
+        except Exception:
+            n_failed += 1
+            continue
+        for name in names:
+            per_stage[name].append(elapsed[name])
+        totals.append(sum(elapsed.values()))
+
+    return StagedLatencyReport(
+        total=_stats_ms(np.asarray(totals, dtype=np.float64), device_name),
+        stages={name: _stats_ms(np.asarray(per_stage[name], dtype=np.float64), device_name) for name in names},
+        n_failed_items=n_failed,
+    )
