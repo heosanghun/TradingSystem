@@ -26,3 +26,7 @@ __pycache__/
 
 # Non-final ledger records
 /ledger/provisional.csv
+
+# Local credentials (never commit)
+.env
+.env.*
