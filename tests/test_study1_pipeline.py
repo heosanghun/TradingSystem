@@ -10,8 +10,10 @@ from ts.study1.attribution import compute_modality_group_shapley
 from ts.study1.chart_renderer import CandlestickChartRenderer, normalize_chart_batch_to_tensor
 from ts.study1.encoders import CrossModalStateFusion, MultimodalStateEncoder, TechnicalIndicatorCalculator
 from ts.study1.ensemble import DynamicRegimeEnsemble
+from ts.study1.per_buffer import SegmentTreePERBuffer, _SumMinSegmentTree
+from ts.study1.ppo_expert import compute_regime_rewards
 from ts.study1.regime_classifier import XGBoostRegimeClassifier
-from ts.study1.regime_labeling import REGIME_BULL, REGIME_SIDEWAYS, TrendScanningLabeler
+from ts.study1.regime_labeling import REGIME_BEAR, REGIME_BULL, REGIME_SIDEWAYS, TrendScanningLabeler
 
 
 def _make_synthetic_ohlcv(n: int = 300) -> pd.DataFrame:
@@ -48,7 +50,7 @@ def test_chart_renderer_and_2token_cross_modal_attention() -> None:
     f_senti = torch.randn(4, 32)
     s_t, attn = fusion.forward_with_weights(f_vis, f_tech, f_senti)
     assert s_t.shape == (4, 128)
-    assert attn.shape == (4, 2)  # Genuine 2-token attention over [Visual, Tech]!
+    assert attn.shape == (4, 2)  # 2-token attention over [Visual, Tech]
     assert torch.allclose(attn.sum(dim=-1), torch.ones(4), atol=1e-5)
     assert not torch.allclose(attn[:, 0], torch.ones(4))
 
@@ -257,3 +259,117 @@ def test_group_shapley_active_regime_chosen_logit_3seed_stability() -> None:
         device=torch.device("cpu"),
     )
     assert abs(res_const.sentiment_pct) < 1e-6
+
+
+def test_vectorized_per_rewards_and_ppo_convergence_logging(tmp_path) -> None:
+    import json
+    from collections import deque
+
+    rng = np.random.default_rng(31415)
+
+    # 1. Segment tree bulk build, batch prefix lookup, and duplicate-index priority updates
+    td_init = rng.normal(0.0, 1.5, size=137)
+    per_vec = SegmentTreePERBuffer(alpha=0.6, eps=1e-6)
+    per_vec.build_from_td_errors(td_init)
+
+    tree_ref = _SumMinSegmentTree(len(td_init))
+    for i, val in enumerate(np.power(np.abs(td_init) + 1e-6, 0.6)):
+        tree_ref.set(i, float(val))
+
+    assert np.allclose(per_vec.tree.sum_tree, tree_ref.sum_tree, atol=1e-12)
+    assert np.isclose(per_vec.tree.min_positive(), tree_ref.min_positive(), atol=1e-12)
+
+    masses = rng.uniform(0.0, tree_ref.total_sum(), size=64)
+    batch_idx = per_vec.tree.find_prefixsum_idx_batch(masses)
+    scalar_idx = np.array([tree_ref.find_prefixsum_idx(float(m)) for m in masses], dtype=np.int64)
+    assert np.array_equal(batch_idx, scalar_idx)
+
+    dup_indices = np.array([5, 12, 5, 100, 12, 0, 136], dtype=np.int64)
+    new_tds = np.array([0.1, 0.9, 2.5, 0.4, 0.05, 1.1, 0.3], dtype=np.float64)
+    per_vec.update_priorities(dup_indices, new_tds)
+    for idx_i, td_i in zip(dup_indices, new_tds):
+        tree_ref.set(int(idx_i), float((abs(td_i) + 1e-6) ** 0.6))
+    assert np.allclose(per_vec.tree.sum_tree, tree_ref.sum_tree, atol=1e-12)
+    assert np.isclose(per_vec.tree.min_positive(), tree_ref.min_positive(), atol=1e-12)
+
+    # Zero-TD outlier must not collapse importance weights toward zero at beta=1.0
+    per_vec.update_priorities(np.array([0], dtype=np.int64), np.array([0.0], dtype=np.float64))
+    _, is_w_beta1 = per_vec.sample(batch_size=64, beta=1.0, rng=rng)
+    assert np.isclose(float(np.mean(is_w_beta1)), 1.0, atol=1e-5)
+    assert float(np.min(is_w_beta1)) > 0.05
+
+    # 2. Vectorized regime rewards vs step-by-step reference
+    n_steps = 96
+    mkt_ret = rng.normal(0.0001, 0.008, size=n_steps)
+    weights = rng.choice([-1.0, -0.5, 0.0, 0.5, 1.0], size=n_steps)
+    costs = rng.uniform(0.0004, 0.0012, size=n_steps)
+
+    for reg_id in (REGIME_BULL, REGIME_BEAR, REGIME_SIDEWAYS):
+        rew_vec, net_vec = compute_regime_rewards(
+            regime_id=reg_id,
+            bar_asset_returns=mkt_ret,
+            chosen_weights=weights,
+            one_way_cost_rates=costs,
+            bear_window=24,
+            bear_dd_floor=1e-4,
+            bear_cost_penalty=1.0,
+            sideways_turnover_penalty=0.002,
+        )
+        rew_ref = np.zeros(n_steps, dtype=np.float32)
+        net_ref = np.zeros(n_steps, dtype=np.float32)
+        buf = deque(maxlen=24)
+        prev_w = 0.0
+        for t in range(n_steps):
+            dw = abs(float(weights[t]) - prev_w)
+            c_t = float(costs[t]) * dw
+            nr = float(weights[t]) * float(mkt_ret[t]) - c_t
+            net_ref[t] = nr
+            buf.append(nr)
+            if reg_id == REGIME_BULL:
+                rew_ref[t] = float(np.log(max(1.0 + nr, 1e-6)))
+            elif reg_id == REGIME_BEAR:
+                arr = np.asarray(buf, dtype=np.float64)
+                dd = float(np.sqrt(np.mean(np.minimum(0.0, arr) ** 2)))
+                st = float(np.mean(arr)) / max(dd, 1e-4)
+                rew_ref[t] = float(np.clip(st, -10.0, 10.0) - 1.0 * c_t)
+            else:
+                rew_ref[t] = float(nr - 0.002 * dw)
+            prev_w = float(weights[t])
+        assert np.allclose(net_vec, net_ref, atol=1e-6)
+        assert np.allclose(rew_vec, rew_ref, atol=1e-5)
+
+    # 3. Telemetry logging per fold, regime, and seed
+    states = rng.normal(0.0, 1.0, size=(90, 32)).astype(np.float32)
+    regimes = np.array([i % 3 for i in range(90)], dtype=np.int64)
+    ens = DynamicRegimeEnsemble(
+        state_dim=32,
+        experts_per_regime=2,
+        ppo_kwargs={"device": torch.device("cpu"), "minibatch_size": 32, "ppo_epochs": 2},
+    )
+    ens.train_all_pools(
+        train_states=states,
+        train_regimes=regimes,
+        next_bar_returns=mkt_ret[:90],
+        cost_rates=costs[:90],
+        total_rollouts=3,
+        log_dir=tmp_path,
+        fold_id=1,
+        tag_prefix="unit",
+    )
+    saved = sorted(tmp_path.glob("unit_fold1_regime*_seed*.json"))
+    assert len(saved) == 6
+    sample_payload = json.loads(saved[0].read_text(encoding="utf-8"))
+    assert sample_payload["fold_id"] == 1
+    assert sample_payload["total_rollouts"] == 3
+    assert len(sample_payload["rollout_logs"]) == 3
+    required_keys = {
+        "rollout",
+        "mean_reward",
+        "policy_entropy",
+        "mean_turnover",
+        "greedy_mean_turnover",
+        "value_loss",
+        "actor_loss",
+        "greedy_action_dist",
+    }
+    assert required_keys.issubset(sample_payload["rollout_logs"][0].keys())

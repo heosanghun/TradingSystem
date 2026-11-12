@@ -1,12 +1,12 @@
 """
-Dual-Process Tri-Objective Reasoning Distillation & Property 5.1 Verifier (Ch. V Sec 4).
+Dual-Process Tri-Objective Reasoning Distillation and Property 5.1 Verifier (Ch. V Sec 4).
 
-Implements Eqs. (V.7)–(V.11) & Appendix C.2–C.3 with 100% intact PyTorch autograd:
-  `L_total = λ_1 * L_task + λ_2 * L_policy + λ_3 * L_reasoning`
-  Default `(λ_1, λ_2, λ_3) = (0.4, 0.4, 0.2)`, global grad clip `0.5`, AdamW `50` epochs.
+Implements Eqs. (V.7)-(V.11) and Appendix C.2-C.3 with end-to-end PyTorch autograd:
+  `L_total = lambda_1 * L_task + lambda_2 * L_policy + lambda_3 * L_reasoning`
+  Default `(lambda_1, lambda_2, lambda_3) = (0.4, 0.4, 0.2)`, global grad clip `0.5`, AdamW `50` epochs.
 
-Supports `λ_3 ∈ {0.0, 0.1, 0.2, 0.3, 0.4, 0.5}` sensitivity sweeps (setting
-`λ_1 = λ_2 = (1 - λ_3) / 2` so `λ_1 + λ_2 + λ_3 == 1.0`) for Table 6.11!
+Supports `lambda_3 in {0.0, 0.1, 0.2, 0.3, 0.4, 0.5}` sensitivity sweeps (setting
+`lambda_1 = lambda_2 = (1 - lambda_3) / 2` so `lambda_1 + lambda_2 + lambda_3 == 1.0`) for Table 6.11.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from ts.study3.teacher_signal import TeacherSignalPack
 
 
 class ReasoningDistillationLoss(nn.Module):
-    """Exact tri-objective loss from Eq. (V.7)–(V.11) & Appendix C.2."""
+    """Tri-objective distillation loss from Eqs. (V.7)-(V.11) and Appendix C.2."""
 
     def __init__(
         self,

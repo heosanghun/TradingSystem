@@ -179,7 +179,6 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--study2-dir", type=str, default=str(PROJECT_ROOT / "runs" / "study2"))
     parser.add_argument("--no-fetch-1m", action="store_true", help="Load 1m klines strictly from local cache without network calls.")
-    parser.add_argument("--offline-finbert-hash", action="store_true", help="Skip HuggingFace FinBERT download in airgapped tests.")
     parser.add_argument(
         "--allow-test-fallbacks",
         action="store_true",
@@ -266,7 +265,6 @@ def main() -> None:
 
     finbert = FinBERTReasoningEncoder(
         model_name=cfg.study3.finbert_model,
-        offline_hash_mode=args.offline_finbert_hash,
         device=device,
     )
 
@@ -417,7 +415,7 @@ def main() -> None:
             "llm_simulated": llm_simulated,
             "teacher_signals_present": teacher_present,
             "lob_input_mode": lob_mode,
-            "finbert_offline_hash": bool(args.offline_finbert_hash),
+            "finbert_offline_hash": False,
             "quick_verify": bool(args.allow_test_fallbacks),
             "reduced_training_budget": bool(epochs < cfg.study3.epochs),
         },

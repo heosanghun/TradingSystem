@@ -1,7 +1,7 @@
 """
 Group-level Shapley attribution for Study 1 multimodal representations (Chapter VI Sec 4.2, Eq. VI.12).
 
-Computes exact 3-player Shapley values (`2^3 = 8` coalitions) over the three modality groups:
+Computes closed-form 3-player Shapley values (`2^3 = 8` coalitions) over the three modality groups:
   - Visual (`128-d` ResNet-18 + CBAM embedding)
   - Technical (`64-d` indicator embedding)
   - Sentiment (`32-d` news EWMA embedding)
@@ -67,7 +67,7 @@ def compute_modality_group_shapley(
     device: Optional[torch.device] = None,
 ) -> ModalityAttributionResult:
     """
-    Compute exact 3-group Shapley shares (`visual_pct`, `tech_pct`, `sentiment_pct`) targeting
+    Compute closed-form 3-group Shapley shares (`visual_pct`, `tech_pct`, `sentiment_pct`) targeting
     each bar's active regime pool ensemble logit for its chosen action `chosen_actions[t]`.
     """
     n_total = len(concat_modalities)

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 import pandas as pd
@@ -28,6 +30,22 @@ from ts.study3.teacher_signal import (
     build_aligned_distillation_dataset,
     compute_teacher_soft_logits_and_probs,
 )
+
+
+class HashTestReasoningEncoder(FinBERTReasoningEncoder):
+    """Test-only deterministic 768-d embedding stub avoiding HuggingFace network downloads."""
+
+    def encode_texts(self, texts: Sequence[str], batch_size: int = 32) -> np.ndarray:
+        n = len(texts)
+        out = np.empty((n, 768), dtype=np.float32)
+        for i, txt in enumerate(texts):
+            seed_int = int.from_bytes(
+                hashlib.sha256((txt or "").encode("utf-8")).digest()[:8], "little"
+            )
+            rng = np.random.default_rng(seed_int)
+            vec = rng.standard_normal(768).astype(np.float32)
+            out[i] = vec / max(float(np.linalg.norm(vec)), 1e-6)
+        return out
 
 
 def test_student_1dcnn_appendix_c_and_property_5_1() -> None:
@@ -67,9 +85,9 @@ def test_distillation_autograd_intact_and_lambda3_sweep() -> None:
 
     z_t, p_t = compute_teacher_soft_logits_and_probs(0.5, sigma_w=0.25, tau=2.0)
     assert z_t.shape == (5,)
-    assert int(np.argmax(p_t)) == 3  # +0.5 corresponds to index 3!
+    assert int(np.argmax(p_t)) == 3  # +0.5 corresponds to index 3
 
-    finbert = FinBERTReasoningEncoder(offline_hash_mode=True)
+    finbert = HashTestReasoningEncoder()
     pack = build_aligned_distillation_dataset(
         per_bar_lob_windows=per_bar_wins,
         w_final_per_bar=w_finals,
@@ -78,9 +96,9 @@ def test_distillation_autograd_intact_and_lambda3_sweep() -> None:
         one_way_cost_rates=costs,
         finbert_encoder=finbert,
     )
-    assert pack.lob_windows.shape == (80, 40, 100)  # 8 bars * 10 windows/bar!
+    assert pack.lob_windows.shape == (80, 40, 100)  # 8 bars * 10 windows/bar
 
-    # Verify Conv1d weights actually update (fixing the `.item()` zero-grad bug in old repo!)
+    # Verify Conv1d weights update via end-to-end autograd
     trainer = StudentDistillationTrainer(
         lambda_reasoning=0.2, epochs=2, batch_size=32, device=torch.device("cpu")
     )

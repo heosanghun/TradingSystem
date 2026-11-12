@@ -1,15 +1,15 @@
 """
-System 1 Lightweight Student Model (`Student1DCNN`) — Exact Appendix C Implementation.
+System 1 Lightweight Student Model (`Student1DCNN`) matching Appendix C.
 
-Matches Revised Thesis Appendix C (p. 97) & Chapter V Sec 3 & Sec 5:
-- Input: `(B, 40, 100)` (40 LOB features × 100 ticks)
+Implements Chapter V Sec 3, Sec 5, and Appendix C (p. 97):
+- Input: `(B, 40, 100)` (40 microstructure features x 100 time steps)
 - `Conv1d(40, 64, k=3, pad=1) -> ReLU -> MaxPool1d(2, 2)`
 - `Conv1d(64, 128, k=3, pad=1) -> ReLU -> MaxPool1d(2, 2)`
-- `AdaptiveAvgPool1d(1) -> LayerNorm(128)` -> `H_student ∈ R^{B × 128}`
+- `AdaptiveAvgPool1d(1) -> LayerNorm(128)` -> `H_student in R^{B x 128}`
 - Heads:
-  - `actor`: `Linear(128, 5)` (ONLY head executed during online deployment!)
+  - `actor`: `Linear(128, 5)` (only head executed during online deployment)
   - `critic`: `Linear(128, 1)` (used only during offline training for `L_task`)
-  - `projection_head`: `Linear(128, 256) -> GELU -> Linear(256, 768)` with NO output
+  - `projection_head`: `Linear(128, 256) -> GELU -> Linear(256, 768)` with no output
     activation (used only during offline training for `L_reasoning` cosine alignment)
 """
 
@@ -21,7 +21,7 @@ import torch.nn.functional as F
 
 
 class Student1DCNN(nn.Module):
-    """Exact Appendix C Student 1D-CNN with explicit standalone online execution path."""
+    """Appendix C Student 1D-CNN with standalone online execution path."""
 
     def __init__(
         self,
@@ -63,8 +63,8 @@ class Student1DCNN(nn.Module):
     def act_online(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Online deployment path (Ch. V Sec 5.2 & Fig. 5.2):
-        Executes ONLY the 1D-CNN backbone + `actor` head.
-        Zero Teacher, LLM, FinBERT, `critic`, or `projection_head` computation!
+        Executes only the 1D-CNN backbone and `actor` head without running
+        Teacher, LLM, FinBERT, `critic`, or `projection_head`.
         Returns `(greedy_actions, action_probs)`.
         """
         h = self.encode_hidden(x)

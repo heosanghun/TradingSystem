@@ -12,9 +12,9 @@ Provides:
    - 50-bar SMA percentage slope `m_t` and 20-bar relative volatility `sigma_t = Std_20(C)/SMA_20(C)`
    - Quantile thresholds `tau_trend = Q_0.60(|m_t|)` and `tau_vol = Q_0.75(sigma_t)` fitted strictly on train fold
 2. `TrendScanningLabeler` (Phase 2, López de Prado 2020):
-   - Forward horizons `L ∈ [24..120]` OLS slope t-statistic on log prices
-   - Strictly purged at `train_end_exclusive` (`t + horizon_max < train_end_exclusive`) so
-     test-fold prices are NEVER touched!
+   - Forward horizons `L in [24..120]` OLS slope t-statistic on log prices
+   - Purged at `train_end_exclusive` (`t + horizon_max < train_end_exclusive`) so
+     test-fold prices are not accessed.
 """
 
 from __future__ import annotations

@@ -12,7 +12,7 @@ execute seamlessly in sequence:
   - Teacher Signal Conversion: P_teacher^tau (sigma_w=0.25, tau=2.0) + FinBERT [CLS](768) + 10-window broadcast
   - Offline Study 3 Reasoning Distillation: L_total = 0.4 L_task + 0.4 L_policy + 0.2 L_reasoning
   - Online System 1 Execution: `Student1DCNN.act_online(lob_40x100)` outputting 5 discrete actions
-    `(-1.0, -0.5, 0.0, +0.5, +1.0)` with ZERO Teacher / LLM / FinBERT / projection-head calls!
+    `(-1.0, -0.5, 0.0, +0.5, +1.0)` without Teacher, LLM, FinBERT, or projection-head calls.
 """
 
 from __future__ import annotations
@@ -36,12 +36,17 @@ from ts.study2.citation_verifier import CitationVerifier
 from ts.study2.debate import GroundedDebateEngine
 from ts.study2.hypergraph import build_daily_hypergraph
 from ts.study3.distillation import StudentDistillationTrainer
-from ts.study3.teacher_signal import FinBERTReasoningEncoder, build_aligned_distillation_dataset
+from ts.study3.teacher_signal import build_aligned_distillation_dataset
 
 try:
     from test_study2_pipeline import EconometricTestClient as LLMClient
 except ImportError:
     from tests.test_study2_pipeline import EconometricTestClient as LLMClient  # type: ignore[no-redef]
+
+try:
+    from test_study3_distillation import HashTestReasoningEncoder
+except ImportError:
+    from tests.test_study3_distillation import HashTestReasoningEncoder  # type: ignore[no-redef]
 
 
 def test_complete_fig1_end_to_end_dataflow() -> None:
@@ -65,7 +70,7 @@ def test_complete_fig1_end_to_end_dataflow() -> None:
         index=idx,
     )
 
-    # Input ②: Point-in-time raw headlines (no precomputed logits -> auto-scored!)
+    # Input ②: Point-in-time headlines with test sentiment logits (strictly causal filtering)
     news_df = pd.DataFrame(
         {
             "published_at": [idx[10] + pd.Timedelta(minutes=15), idx[60] + pd.Timedelta(minutes=25)],
@@ -74,11 +79,14 @@ def test_complete_fig1_end_to_end_dataflow() -> None:
                 "Institutional spot demand stabilizes Bitcoin order book depth",
             ],
             "source": ["Reuters", "CoinDesk"],
+            "logit_neg": [1.8, -0.9],
+            "logit_neu": [0.2, 0.3],
+            "logit_pos": [-1.1, 1.6],
         }
     )
     news_store = PointInTimeNewsStore(news_df)
-    scored_cnt = news_store.populate_missing_logits_with_finbert(offline_hash_mode=True)
-    assert scored_cnt == 2
+    assert len(news_store.query_before(idx[10])) == 0
+    assert len(news_store.query_before(idx[11])) == 1
 
     # Input ③: Cross-asset & macro causal return matrix (lagged driver -> BTCUSDT)
     driver = rng.normal(0.0, 0.015, size=n_bars)
@@ -185,7 +193,7 @@ def test_complete_fig1_end_to_end_dataflow() -> None:
     # -------------------------------------------------------------------------
     # 4. Offline Study 3 Reasoning Distillation (Teacher -> Student1DCNN)
     # -------------------------------------------------------------------------
-    finbert = FinBERTReasoningEncoder(offline_hash_mode=True)
+    finbert = HashTestReasoningEncoder()
     distill_pack = build_aligned_distillation_dataset(
         per_bar_lob_windows=[per_bar_lob_wins[i] for i in tr_slice],
         w_final_per_bar=w_finals_tr,
@@ -207,10 +215,10 @@ def test_complete_fig1_end_to_end_dataflow() -> None:
     assert len(logs) == 2 and "total_loss" in logs[0]
 
     # -------------------------------------------------------------------------
-    # 5. Online System 1 Execution (`act_online`) — Zero Teacher/LLM/Projection Calls!
+    # 5. Online System 1 Execution (`act_online`) — No Teacher/LLM/Projection Calls
     # -------------------------------------------------------------------------
     def _forbidden_online_call(*_args, **_kwargs):
-        raise AssertionError("Offline Teacher / LLM / Projection component must NEVER run during online System 1 inference!")
+        raise AssertionError("Offline Teacher / LLM / Projection component must not run during online System 1 inference.")
 
     llm.generate_json = _forbidden_online_call  # type: ignore[method-assign]
     finbert.encode_texts = _forbidden_online_call  # type: ignore[method-assign]

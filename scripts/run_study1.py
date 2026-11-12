@@ -13,6 +13,7 @@ Measures and records:
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -124,7 +125,22 @@ def _run_study1_fold_branch(
         rolling_sharpe_window_bars=cfg.study1_ppo.rolling_sharpe_window_bars,
         bars_per_year=cfg.evaluation.btc_bars_per_year,
         base_seed=1000 * fold.fold_id + base_seed_offset,
-        ppo_kwargs={"device": device},
+        ppo_kwargs={
+            "hidden_dims": cfg.study1_ppo.hidden_dims,
+            "lr_actor": cfg.study1_ppo.lr_actor,
+            "lr_critic": cfg.study1_ppo.lr_critic,
+            "gamma": cfg.study1_ppo.gamma,
+            "gae_lambda": cfg.study1_ppo.gae_lambda,
+            "clip_eps": cfg.study1_ppo.clip_eps,
+            "entropy_coef": cfg.study1_ppo.entropy_coef,
+            "value_coef": cfg.study1_ppo.value_coef,
+            "per_alpha": cfg.study1_ppo.per_alpha,
+            "per_beta_start": cfg.study1_ppo.per_beta_start,
+            "per_beta_end": cfg.study1_ppo.per_beta_end,
+            "minibatch_size": cfg.study1_ppo.minibatch_size,
+            "ppo_epochs": cfg.study1_ppo.ppo_epochs,
+            "device": device,
+        },
     )
     ens.train_all_pools(
         train_states=tr_states,
@@ -177,14 +193,13 @@ def main() -> None:
         default=str(default_news) if default_news.exists() else "",
         help="CSV/Parquet news archive with published_at and headline.",
     )
-    parser.add_argument("--offline-finbert-hash", action="store_true", help="Skip HuggingFace FinBERT download in airgapped tests.")
     parser.add_argument("--no-pretrained-resnet", action="store_true", help="Disable ImageNet pretrained ResNet-18 weights in offline tests.")
     parser.add_argument(
         "--variant-a-modality",
         type=str,
         default="tech_only",
         choices=["tech_only", "visual_tech_no_senti"],
-        help="Input modality mode for Variant A ablation (default: single-modality tech_only; see D-12).",
+        help="Input modality mode for Variant A ablation (default: single-modality tech_only; see D-14).",
     )
     parser.add_argument("--pretrain-epochs", type=int, default=4)
     parser.add_argument("--ppo-rollouts", type=int, default=None)
@@ -220,9 +235,11 @@ def main() -> None:
     if not news_store.df.empty:
         n_scored = news_store.populate_missing_logits_with_finbert(
             model_name=cfg.study3.finbert_model,
-            offline_hash_mode=args.offline_finbert_hash,
             device=device,
         )
+        gc.collect()
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
         if n_scored > 0:
             print(f"[Study 1] Scored {n_scored} raw news headlines into 3-class sentiment logits.")
 
@@ -343,7 +360,7 @@ def main() -> None:
         oos_ens_probs_all.append(branch_d.ens_probs_te)
         oos_var_d_weights.append(branch_d.weights_te)
 
-        # Table 6.9 Exact Group Shapley on Period II (2022) folds targeting active regime chosen action logit
+        # Table 6.9 3-group Shapley attribution on Period II (2022) folds targeting active regime chosen action logit
         if fold.test_start.year == 2022 and branch_d.encoder.fusion is not None:
             shap_res = compute_modality_group_shapley(
                 concat_modalities=branch_d.te_concat_mods,
@@ -412,6 +429,10 @@ def main() -> None:
         )
         prev_last_regime_a = branch_a.next_initial_regime
         oos_var_a_weights.append(branch_a.weights_te)
+        branch_a.encoder.cpu()
+        branch_d.encoder.cpu()
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
 
         # Table 6.12 Temperature Sensitivity (K = 5)
         for t_val in cfg.evaluation.sensitivity_temp_grid:
@@ -532,7 +553,7 @@ def main() -> None:
     run_ctx = RunContext(
         stage="study1",
         flags={
-            "finbert_offline_hash": bool(args.offline_finbert_hash),
+            "finbert_offline_hash": False,
             "quick_verify": bool(not use_pretrained),
             "reduced_training_budget": bool(ppo_rollouts < default_rollouts or args.pretrain_epochs < 4),
         },
