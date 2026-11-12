@@ -186,13 +186,18 @@ class LLMClient:
                 return parsed
             except (requests.RequestException, ValueError, KeyError, IndexError, TypeError) as exc:
                 self.telemetry["failed_attempts"] += 1
-                LOGGER.warning("LLM call failed: role=%s attempt=%d/%d error=%s",
-                               role, attempt + 1, self.max_request_attempts, type(exc).__name__)
+                LOGGER.warning("LLM call failed: role=%s attempt=%d/%d error=%s: %s",
+                               role, attempt + 1, self.max_request_attempts, type(exc).__name__,
+                               str(exc)[:160])
+                self.telemetry["failed_" + type(exc).__name__] += 1
                 if attempt + 1 == self.max_request_attempts:
                     self.telemetry["failed_calls"] += 1
                     raise LLMCallError(f"{role}: {type(exc).__name__} after {attempt+1} attempts") from exc
                 self.telemetry["retries"] += 1
-                time.sleep(min(30., self.retry_backoff_sec * 2 ** attempt))
+                # Only transport errors need a growing pause; a malformed or cut-off answer
+                # is simply sampled again.
+                if isinstance(exc, requests.RequestException):
+                    time.sleep(min(30., self.retry_backoff_sec * 2 ** attempt))
         raise AssertionError("Unreachable retry state")
 
     def _generate_json_once(
