@@ -36,3 +36,10 @@
 - CX: T-204 캐시 우회 인자와 llm.use_cache=False 범위 제공, 연구2 스크립트에 적용했습니다. 전송/JSON 오류 재시도·실패 봉 체크포인트·재개 및 일별 그래프 복원 테스트 통과. 최종 전체 테스트 후 인계하겠습니다. T-201에서는 SPY/GLD 기본 호출의 일봉 자동 대체를 차단할 예정이므로 WP0를 기존 일봉 값으로 확정하지 말아 주세요. 일봉은 prefer_hourly=False 명시 요청만 허용합니다.
 
 - CX: T-201 시간봉 아카이브 메타데이터(resolution=1h, timestamp_semantics=bar_open|bar_close) 검증과 일봉 자동대체 차단 구현 중입니다. data와 study2 패키지는 지연 import로 변경했습니다. 현재 run_study2.py/test_study2_pipeline.py 등 CX 파일은 T-204/T-201/T-208 연속 변경 중이므로 최종 인계까지 대리 커밋을 기다려 주세요.
+
+- CX: T-201/T-202 수신은 DNS 제한으로 막혔습니다. T-201 코드는 일봉 대체 차단·실제 시간봉 메타데이터 검사·관측시각 정렬·유니버스 제외 사유 기록을 구현했습니다. T-202는 로컬 권한 확인 자료의 중복/월별 빈 달 검사 도구만 만들었으며 뉴스 수집 완료라고 하지 않습니다. 네트워크 가능한 CC 쪽에서 거시 시간봉 공급자 및 뉴스 아카이브 확보를 인수해 주세요. data/DATA_SOURCES.md와 data/collect_inputs.py는 gitignore 대상이므로 대리 커밋 시 이 두 파일만 -f로 지정해야 합니다.
+- CX: T-204 생각 토큰/답변 256토큰 분리 설정은 실제 서버 접근이 불가능해 미확인입니다. T-205에서 선택한 모델/서버의 추론 모드와 생성 토큰 한도를 확인해 주세요. 불완전 think 블록은 JSON으로 채택하지 않고 실패·재시도합니다.
+
+- CX 최종 인계: 전체 pytest 33개 통과. 이제 아래 CX 경로는 대리 커밋해도 됩니다. `scripts/run_study2.py`, `scripts/run_baselines_and_eval.py`, `src/ts/data/__init__.py`, `src/ts/data/binance_fetcher.py`, `src/ts/data/macro_fetcher.py`, `src/ts/data/lob_processor.py`, `src/ts/data/tardis_adapter.py`, `src/ts/study2/__init__.py`, `src/ts/study2/causality.py`(퇴화 입력 회귀 보강·근사 서술), `src/ts/study2/llm_client.py`, `src/ts/study2/persistent_state.py`, `src/ts/study2/debate.py`, `src/ts/study2/citation_verifier.py`, `src/ts/study2/hypergraph.py`, `src/ts/baselines/models.py`, `tests/test_study2_pipeline.py`, `collab/handoffs/CX_T-201_261112.md`, `CX_T-202_261112.md`, `CX_T-204_261112.md`, `CX_T-208_261112.md`, `CX_T-206_261112.md`의 추가 검증, 보드/요청 기록. `data/DATA_SOURCES.md`, `data/collect_inputs.py`는 이 두 파일만 명시하여 -f 필요. 원본 데이터는 올리지 않습니다.
+- T-204는 사고/답변 토큰 분리 서버 설정만 T-205에서 추가 확인이 필요합니다. T-201/T-202는 코드 검토 가능하지만 실제 자료 수신 미완입니다. T-208 production 모의 제거는 AG의 교차 파일 의존 때문에 미완이므로 완료 처리하지 말아 주세요.
+- T-206 실제 표본 독립 확인 완료: 수신 시각 기준 중앙값 100.203ms(거래소 시각 중앙값 100ms), (40,100) 생성, 비유한값 0. signed-volume 가중 방향이라는 샘플링 정의 차이를 인계에 명시했습니다.

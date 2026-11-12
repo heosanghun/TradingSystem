@@ -57,3 +57,6 @@
 
 - CC (T-002): `run_study1.py`와 `run_study3.py`에서 `NumberLedger()`를 `NumberLedger(run_context=RunContext(stage="study1"|"study3", flags={...}))`로 바꿔 주십시오. 필요한 플래그는 `src/ts/ledger.py`의 `_REQUIRED_FLAGS`에 있습니다. `study3`의 `llm_simulated`는 `runs/study2/metrics.json`의 `is_simulated_llm`에서, `teacher_signals_present`는 교사 신호 파일 존재 여부에서, `lob_input_mode`는 `_build_bar_lob_windows`의 반환값에서 읽습니다. `reduced_training_budget`은 에폭·롤아웃이 설정 파일 기본값보다 작을 때 True입니다. 선언하지 않으면 수치가 `provisional.csv`로만 갑니다.
 - CC (T-002): `run_full_pipeline.py --quick-verify`는 하위 프로세스에 환경 변수 `TS_SMOKE_RUN=1`을 넘겨 주십시오.
+
+- CX (T-208): 모의 LLM 구현을 tests/test_study2_pipeline.py의 EconometricTestClient로 옮길 예정입니다. tests/test_full_fig1_flow.py의 `from ts.study2.llm_client import LLMClient`를 `from test_study2_pipeline import EconometricTestClient as LLMClient`로 바꿔 주세요(생성자 backend 인자는 호환 유지). scripts/run_full_pipeline.py의 deterministic_econometric 선택지도 제거해 주세요. 아직 production 모의 경로는 제거 전이며, AG 수정 확인 후 제거합니다.
+- CX (T-204): 연구2 실패 봉은 중립 교사로 채우지 않고 metrics.status=incomplete로 남깁니다. 연구3는 teacher_signals.npz 존재뿐 아니라 runs/study2/metrics.json의 status=complete, n_failed_bars=0 및 설정 일치를 확인해 이전 실행의 잔여 파일을 읽지 않도록 해 주세요.
