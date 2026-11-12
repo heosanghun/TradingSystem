@@ -82,11 +82,27 @@ def _build_bar_lob_windows(
         sub_wins = []
         for k in range(lob_proc.windows_per_bar):
             sub_pos = max(0, pos - (lob_proc.windows_per_bar - 1 - k) * 6)
-            w_k, _ = lob_proc.extract_from_subbar_klines(df_1m, sub_pos)
+            w_k = win_latest if sub_pos == pos else lob_proc.extract_from_subbar_klines(df_1m, sub_pos)[0]
             sub_wins.append(w_k)
         per_bar_train.append(sub_wins)
 
     return per_bar_train, online_test, mode_tag
+
+
+def _save_student_oos_hidden(path: Path, bar_index: pd.DatetimeIndex, hidden: np.ndarray) -> None:
+    """
+    Save out-of-sample `Student1DCNN.encode_hidden` vectors (`(N, 128)`) alongside bar open
+    timestamps in UTC nanoseconds (`timestamps_ns`) for `scripts/make_latent_figure.py`.
+    """
+    ts_utc = pd.DatetimeIndex(bar_index)
+    ts_utc = ts_utc.tz_localize("UTC") if ts_utc.tz is None else ts_utc.tz_convert("UTC")
+    timestamps_ns = ts_utc.as_unit("ns").asi8.astype(np.int64)
+    hidden_f32 = np.asarray(hidden, dtype=np.float32)
+    if hidden_f32.ndim != 2 or len(timestamps_ns) != hidden_f32.shape[0]:
+        raise ValueError(
+            f"Hidden vector shape {hidden_f32.shape} does not match bar count {len(timestamps_ns)}."
+        )
+    np.savez_compressed(path, timestamps_ns=timestamps_ns, hidden=hidden_f32)
 
 
 def _load_and_validate_teacher_signals(
@@ -281,6 +297,7 @@ def main() -> None:
     epochs = int(args.epochs) if args.epochs is not None else int(cfg.study3.epochs)
     lambda3_grid = list(cfg.evaluation.sensitivity_lambda3_grid)
     oos_actions_by_l3: Dict[float, List[np.ndarray]] = {l3: [] for l3 in lambda3_grid}
+    oos_hidden_primary_list: List[np.ndarray] = []
     oos_indices_list: List[np.ndarray] = []
     prop_5_1_checks: List[Dict[str, float]] = []
 
@@ -320,11 +337,19 @@ def main() -> None:
             acts_t, _ = student.act_online(te_lob_t)
             oos_actions_by_l3[l3].append(acts_t.cpu().numpy())
 
-            if abs(l3 - cfg.study3.lambda_reasoning) < 1e-6 and fold.fold_id == 1:
+            if abs(l3 - cfg.study3.lambda_reasoning) < 1e-6:
+                student.eval()
                 with torch.no_grad():
-                    _, _, h_p = student(te_lob_t[:32])
-                e_ref = torch.as_tensor(pack.teacher_reasoning[: len(h_p)], dtype=torch.float32, device=device)
-                prop_5_1_checks.append(verify_property_5_1_orthogonality(h_p, e_ref))
+                    hid_chunks = [
+                        student.encode_hidden(te_lob_t[s : s + 512]).cpu().numpy().astype(np.float32)
+                        for s in range(0, len(te_lob_t), 512)
+                    ]
+                    oos_hidden_primary_list.append(np.concatenate(hid_chunks, axis=0))
+                    if fold.fold_id == 1:
+                        _, _, h_p = student(te_lob_t[:32])
+                if fold.fold_id == 1:
+                    e_ref = torch.as_tensor(pack.teacher_reasoning[: len(h_p)], dtype=torch.float32, device=device)
+                    prop_5_1_checks.append(verify_property_5_1_orthogonality(h_p, e_ref))
 
     cat_te_idx = np.concatenate(oos_indices_list)
     eval_df = df_all.iloc[cat_te_idx].copy()
@@ -374,7 +399,14 @@ def main() -> None:
         )
         p1_trainer = StudentDistillationTrainer(
             lambda_reasoning=cfg.study3.lambda_reasoning,
+            tau=cfg.study3.distill_temperature_tau,
+            ppo_clip=cfg.study3.student_ppo_clip,
+            c_v=cfg.study3.student_value_coef,
+            c_e=cfg.study3.student_entropy_coef,
+            lr=cfg.study3.learning_rate,
+            batch_size=cfg.study3.batch_size,
             epochs=epochs,
+            max_grad_norm=cfg.study3.max_grad_norm,
             seed=100 + split_i,
             device=device,
         )
@@ -385,6 +417,13 @@ def main() -> None:
             p1_pred_weights[idx_to_local[int(g_idx)]] = ACTION_WEIGHTS[acts_p1_np[k_pos]]
 
     res_p1 = bt.run_decisions(eval_df, p1_pred_weights, phase=1)
+
+    primary_hidden = np.concatenate(oos_hidden_primary_list, axis=0)
+    _save_student_oos_hidden(
+        out_dir / "student_oos_hidden.npz",
+        pd.DatetimeIndex(eval_df.index),
+        primary_hidden,
+    )
 
     np.savez_compressed(
         out_dir / "student_oos_predictions.npz",
