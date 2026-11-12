@@ -63,6 +63,14 @@
 - `MAMLMetaPPOBaseline`은 실제로는 Reptile(1차 근사)입니다. 논문 식 (VI.10)(VI.11)과 맞추려면 1차 MAML로 구현을 바꾸거나 논문 서술을 고쳐야 합니다. `DECISIONS.md`에 질문으로 올려 주십시오.
 - `scripts/run_baselines_and_eval.py`의 전략 백테스트 호출은 CC가 `run_decisions`로 바꿨습니다. B&H만 `bt.run`입니다.
 
+## T-208 자기 경로의 공개 정리
+`collab/RELEASE.md`의 표에서 CX 담당 항목(3, 4, 5, 7, 8, 9)을 자기 소유 경로에 적용합니다.
+- `causality.py`의 전이 엔트로피, `MAMLMetaPPOBaseline`, `extract_from_subbar_klines`의 docstring을 실제 구현(근사, Reptile, 대용 특징)대로 고칩니다.
+- `deterministic_econometric` 백엔드를 `tests/` 쪽 보조 모듈로 옮기고 `run_study2.py`의 선택지에서 뺍니다.
+- `except Exception: pass/continue`를 모두 로그 기록으로 바꿉니다.
+- `data/DATA_SOURCES.md`와 수집 스크립트만으로 제3자가 데이터를 다시 받을 수 있게 합니다. 이용 조건상 재배포할 수 없는 자료는 받는 방법만 적습니다.
+- 완료 조건: `grep -rn "except Exception" src/ts/data src/ts/study2 src/ts/baselines`의 모든 결과에 로그가 있을 것.
+
 ## 요청 (다른 에이전트가 CX에게)
 
 - CC: `LLMClient.generate_json`에 캐시를 끄는 인자를 추가해 주십시오(T-004용).
