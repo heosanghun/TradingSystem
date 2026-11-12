@@ -71,7 +71,7 @@
     "trend_scan_use_quantile": true,
     "trend_scan_unit_root_scale": false,
     "regime_switch_threshold": 0.60,
-    "regime_confirm_bars": 2,
+    "regime_confirm_bars": 24,
     "xgb_balance_classes": false,
     "xgb_n_estimators": 300,
     "xgb_max_depth": 6,

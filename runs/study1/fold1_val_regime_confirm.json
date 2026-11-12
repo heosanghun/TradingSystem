@@ -1,0 +1,292 @@
+{
+  "script_path": "scripts/calibrate_study1_sideways_penalty.py",
+  "preregistered_in_commit": "8465de5",
+  "executed_on_git_state": "8465de5",
+  "test_fold_accessed": false,
+  "ppo_rollouts_per_fold": 64,
+  "selection_rule": "highest mean Phase 2 Sharpe over the two validation splits; ties within 0.05 -> lowest mean turnover -> smallest C",
+  "grid": [
+    [
+      0.05,
+      2
+    ],
+    [
+      0.05,
+      6
+    ],
+    [
+      0.05,
+      12
+    ],
+    [
+      0.05,
+      24
+    ]
+  ],
+  "splits": [
+    {
+      "name": "A",
+      "val_start": "2021-06-01T00:00:00Z",
+      "val_end_exclusive": "2021-08-01T00:00:00Z"
+    },
+    {
+      "name": "B",
+      "val_start": "2021-08-01T00:00:00Z",
+      "val_end_exclusive": "2021-10-01T00:00:00Z"
+    }
+  ],
+  "summary_by_candidate": [
+    {
+      "C": 0.05,
+      "confirm_bars": 2,
+      "mean_val_sharpe": -1.907,
+      "mean_val_turnover": 0.0279,
+      "val_sharpe_by_split": {
+        "A": -1.371,
+        "B": -2.444
+      }
+    },
+    {
+      "C": 0.05,
+      "confirm_bars": 6,
+      "mean_val_sharpe": -3.039,
+      "mean_val_turnover": 0.0168,
+      "val_sharpe_by_split": {
+        "A": -3.565,
+        "B": -2.514
+      }
+    },
+    {
+      "C": 0.05,
+      "confirm_bars": 12,
+      "mean_val_sharpe": -1.415,
+      "mean_val_turnover": 0.0217,
+      "val_sharpe_by_split": {
+        "A": 1.745,
+        "B": -4.575
+      }
+    },
+    {
+      "C": 0.05,
+      "confirm_bars": 24,
+      "mean_val_sharpe": -0.798,
+      "mean_val_turnover": 0.0178,
+      "val_sharpe_by_split": {
+        "A": -1.033,
+        "B": -0.564
+      }
+    }
+  ],
+  "selected_C": 0.05,
+  "selected_confirm_bars": 24,
+  "rows": [
+    {
+      "split": "A",
+      "C": 0.05,
+      "confirm_bars": 2,
+      "val_regime_switches_per_bar": 0.0349,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_pred_regime_counts": [
+        208,
+        25,
+        1231
+      ],
+      "val_action_counts": [
+        0,
+        209,
+        1083,
+        151,
+        21
+      ],
+      "val_mean_turnover": 0.0304,
+      "val_sharpe": -1.371,
+      "val_pre_cost_sharpe": 1.341,
+      "val_cum_return_pct": -4.91,
+      "val_mdd_pct": -12.83,
+      "elapsed_sec": 66.2
+    },
+    {
+      "split": "A",
+      "C": 0.05,
+      "confirm_bars": 6,
+      "val_regime_switches_per_bar": 0.0109,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_pred_regime_counts": [
+        222,
+        14,
+        1228
+      ],
+      "val_action_counts": [
+        0,
+        0,
+        1138,
+        312,
+        14
+      ],
+      "val_mean_turnover": 0.0068,
+      "val_sharpe": -3.565,
+      "val_pre_cost_sharpe": -2.892,
+      "val_cum_return_pct": -11.07,
+      "val_mdd_pct": -17.57,
+      "elapsed_sec": 67.1
+    },
+    {
+      "split": "A",
+      "C": 0.05,
+      "confirm_bars": 12,
+      "val_regime_switches_per_bar": 0.0055,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_pred_regime_counts": [
+        109,
+        14,
+        1341
+      ],
+      "val_action_counts": [
+        8,
+        14,
+        1220,
+        126,
+        96
+      ],
+      "val_mean_turnover": 0.0181,
+      "val_sharpe": 1.745,
+      "val_pre_cost_sharpe": 3.027,
+      "val_cum_return_pct": 7.46,
+      "val_mdd_pct": -7.49,
+      "elapsed_sec": 66.7
+    },
+    {
+      "split": "A",
+      "C": 0.05,
+      "confirm_bars": 24,
+      "val_regime_switches_per_bar": 0.0,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_pred_regime_counts": [
+        0,
+        0,
+        1464
+      ],
+      "val_action_counts": [
+        0,
+        0,
+        1375,
+        89,
+        0
+      ],
+      "val_mean_turnover": 0.0116,
+      "val_sharpe": -1.033,
+      "val_pre_cost_sharpe": 2.302,
+      "val_cum_return_pct": -1.18,
+      "val_mdd_pct": -3.3,
+      "elapsed_sec": 65.5
+    },
+    {
+      "split": "B",
+      "C": 0.05,
+      "confirm_bars": 2,
+      "val_regime_switches_per_bar": 0.0254,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_pred_regime_counts": [
+        198,
+        27,
+        1233
+      ],
+      "val_action_counts": [
+        0,
+        153,
+        1217,
+        28,
+        60
+      ],
+      "val_mean_turnover": 0.0254,
+      "val_sharpe": -2.444,
+      "val_pre_cost_sharpe": -0.008,
+      "val_cum_return_pct": -7.82,
+      "val_mdd_pct": -11.29,
+      "elapsed_sec": 87.8
+    },
+    {
+      "split": "B",
+      "C": 0.05,
+      "confirm_bars": 6,
+      "val_regime_switches_per_bar": 0.0089,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_pred_regime_counts": [
+        202,
+        19,
+        1237
+      ],
+      "val_action_counts": [
+        10,
+        7,
+        1230,
+        44,
+        167
+      ],
+      "val_mean_turnover": 0.0267,
+      "val_sharpe": -2.514,
+      "val_pre_cost_sharpe": -0.321,
+      "val_cum_return_pct": -10.04,
+      "val_mdd_pct": -16.29,
+      "elapsed_sec": 85.0
+    },
+    {
+      "split": "B",
+      "C": 0.05,
+      "confirm_bars": 12,
+      "val_regime_switches_per_bar": 0.0062,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_pred_regime_counts": [
+        228,
+        19,
+        1211
+      ],
+      "val_action_counts": [
+        16,
+        39,
+        740,
+        663,
+        0
+      ],
+      "val_mean_turnover": 0.0254,
+      "val_sharpe": -4.575,
+      "val_pre_cost_sharpe": -2.674,
+      "val_cum_return_pct": -16.78,
+      "val_mdd_pct": -17.95,
+      "elapsed_sec": 88.0
+    },
+    {
+      "split": "B",
+      "C": 0.05,
+      "confirm_bars": 24,
+      "val_regime_switches_per_bar": 0.0041,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_pred_regime_counts": [
+        219,
+        0,
+        1239
+      ],
+      "val_action_counts": [
+        0,
+        151,
+        957,
+        138,
+        212
+      ],
+      "val_mean_turnover": 0.024,
+      "val_sharpe": -0.564,
+      "val_pre_cost_sharpe": 0.82,
+      "val_cum_return_pct": -3.25,
+      "val_mdd_pct": -7.75,
+      "elapsed_sec": 79.0
+    }
+  ]
+}
