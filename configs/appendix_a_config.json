@@ -29,6 +29,7 @@
     "value_coef": 0.5,
     "minibatch_size": 1024,
     "rollout_steps": 2048,
+    "default_rollouts_per_fold": 64,
     "ppo_epochs": 4,
     "per_alpha": 0.6,
     "per_beta_start": 0.4,

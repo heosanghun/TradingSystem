@@ -13,7 +13,6 @@ Teacher Signal Conversion & Temporal Alignment (Ch. V Sec 2 & Sec 4.4, Eqs. V.2�
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
 
@@ -27,7 +26,7 @@ from ts.study1.ppo_expert import ACTION_WEIGHTS
 @dataclass
 class TeacherSignalPack:
     lob_windows: np.ndarray        # (N_pairs, 40, 100) float32
-    teacher_logits: np.ndarray     # (N_pairs, 5) float32 — raw z^(T) before /tau!
+    teacher_logits: np.ndarray     # (N_pairs, 5) float32 — raw z^(T) prior to division by tau
     teacher_probs: np.ndarray      # (N_pairs, 5) float32 — softmax(z^(T) / tau)
     teacher_reasoning: np.ndarray  # (N_pairs, 768) float32
     bar_returns: np.ndarray        # (N_pairs,) float32 — next-bar asset return for L_task
@@ -41,9 +40,10 @@ def compute_teacher_soft_logits_and_probs(
     tau: float = 2.0,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Exact Eqs. (V.2)–(V.3).
+    Implements Eqs. (V.2)-(V.3).
     Returns `(z_logits, probs_tau)` of shapes `(..., 5)`.
-    Note: `z_logits` is NOT divided by `tau` so `ReasoningDistillationLoss` divides by `tau` once!
+    `z_logits` is returned prior to division by `tau` because `ReasoningDistillationLoss`
+    applies the temperature scaling once.
     """
     w_arr = np.asarray(w_final, dtype=np.float64)[..., None]  # (..., 1)
     grid = ACTION_WEIGHTS[None, :] if w_arr.ndim == 2 else ACTION_WEIGHTS
@@ -59,30 +59,24 @@ def compute_teacher_soft_logits_and_probs(
 
 class FinBERTReasoningEncoder:
     """
-    Extracts `768-d` `[CLS]` embeddings from Meta PM consensus text `C_t` (Eq. V.4).
-
-    In offline unit tests where HuggingFace model weights are intentionally skipped
-    (`offline_hash_mode=True`), produces a deterministic SHA-512 projected 768-d vector
-    (with both positive and negative coordinates, matching FinBERT `[CLS]` geometry).
-    In real runs (`offline_hash_mode=False`), loads `ProsusAI/finbert` onto GPU/CPU.
+    Extracts `768-d` `[CLS]` embeddings from Meta PM consensus text `C_t` (Eq. V.4)
+    using `ProsusAI/finbert` on GPU or CPU.
     """
 
     def __init__(
         self,
         model_name: str = "ProsusAI/finbert",
         max_length: int = 256,
-        offline_hash_mode: bool = False,
         device: Optional[torch.device] = None,
     ) -> None:
         self.model_name = model_name
         self.max_length = max_length
-        self.offline_hash_mode = offline_hash_mode
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._tokenizer = None
         self._model = None
 
     def _ensure_loaded(self) -> None:
-        if self._model is None and not self.offline_hash_mode:
+        if self._model is None:
             self._tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             self._model = AutoModel.from_pretrained(self.model_name).to(self.device)
             self._model.eval()
@@ -92,16 +86,6 @@ class FinBERTReasoningEncoder:
         n = len(texts)
         out = np.empty((n, 768), dtype=np.float32)
         if n == 0:
-            return out
-
-        if self.offline_hash_mode:
-            for i, txt in enumerate(texts):
-                seed_int = int.from_bytes(
-                    hashlib.sha256((txt or "").encode("utf-8")).digest()[:8], "little"
-                )
-                rng = np.random.default_rng(seed_int)
-                vec = rng.standard_normal(768).astype(np.float32)
-                out[i] = vec / max(float(np.linalg.norm(vec)), 1e-6)
             return out
 
         self._ensure_loaded()

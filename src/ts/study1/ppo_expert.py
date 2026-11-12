@@ -1,28 +1,30 @@
 """
-Regime-Specialized PPO+PER Expert (Ch. III Sec 3.1–3.3, Table A.1).
+Regime-Specialized PPO+PER Expert (Chapter III Sec 3.1-3.3, Table A.1).
 
 Implements:
-- 5 Discrete Target-Weight Actions: `w(a) ∈ {-1.0, -0.5, 0.0, +0.5, +1.0}`
-- Separate Actor (`lr=3e-4` + CosineAnnealingLR) and Critic (`lr=1e-3`) networks
-- Regime-specific reward shaping (Eq. III.17–III.19):
+- 5 discrete target-weight actions: `w(a) in {-1.0, -0.5, 0.0, +0.5, +1.0}`
+- Separate Actor (`lr=3e-4` with CosineAnnealingLR) and Critic (`lr=1e-3`) networks
+- Regime-specific reward functions (Eqs. III.17-III.19):
   - Bull (`0`): `ln(V_t / V_{t-1})`
-  - Bear (`1`): 24-bar rolling Sortino (`ε_dd = 1e-4`) − `λ_cost * Cost_t` (`λ_cost = 1.0`)
+  - Bear (`1`): 24-bar rolling Sortino (`eps_dd = 1e-4`) minus `lambda_cost * Cost_t` (`lambda_cost = 1.0`)
   - Sideways (`2`): `(V_t - V_{t-1})/V_{t-1} - C * |w_t - w_{t-1}|`
-- On-policy rollout Segment-Tree PER (`α=0.6`, `β: 0.4 -> 1.0`)
+- On-policy rollout Segment-Tree PER (`alpha=0.6`, `beta: 0.4 -> 1.0`)
+- Per-rollout convergence telemetry (`mean_reward`, `policy_entropy`, `mean_turnover`, `value_loss`,
+  `actor_loss`, and `greedy_action_dist`).
 """
 
 from __future__ import annotations
 
-from collections import deque
-from typing import Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from scipy.signal import lfilter
 
 from ts.study1.per_buffer import SegmentTreePERBuffer
-from ts.study1.regime_labeling import REGIME_BEAR, REGIME_BULL, REGIME_SIDEWAYS
+from ts.study1.regime_labeling import REGIME_BEAR, REGIME_BULL
 
 
 ACTION_WEIGHTS = np.array([-1.0, -0.5, 0.0, 0.5, 1.0], dtype=np.float64)
@@ -40,40 +42,42 @@ def compute_regime_rewards(
     hourly_rf: float = 0.0,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Vectorized computation of exact step portfolio returns & regime-specific rewards
-    (Eqs. III.17–III.19) for a rollout trajectory.
+    Vectorized computation of step portfolio returns and regime-specific rewards
+    (Eqs. III.17-III.19) for a rollout trajectory.
     """
     n = len(bar_asset_returns)
-    net_returns = np.zeros(n, dtype=np.float64)
-    rewards = np.zeros(n, dtype=np.float64)
-    prev_w = 0.0
-    ret_win: deque[float] = deque(maxlen=bear_window)
+    if n == 0:
+        return np.empty(0, dtype=np.float32), np.empty(0, dtype=np.float32)
 
-    for t in range(n):
-        w_t = float(chosen_weights[t])
-        turnover = abs(w_t - prev_w)
-        cost_t = float(one_way_cost_rates[t]) * turnover
-        # Position w_t set at bar t earns next-step return r_t minus switching cost
-        r_port = w_t * float(bar_asset_returns[t]) - cost_t
-        net_returns[t] = r_port
-        ret_win.append(r_port - hourly_rf)
+    w = np.asarray(chosen_weights, dtype=np.float64)
+    r_mkt = np.asarray(bar_asset_returns, dtype=np.float64)
+    c_rate = np.asarray(one_way_cost_rates, dtype=np.float64)
 
-        if regime_id == REGIME_BULL:
-            # Eq. III.17: ln(V_t / V_{t-1}) = ln(1 + r_port)
-            rewards[t] = float(np.log(max(1.0 + r_port, 1e-6)))
-        elif regime_id == REGIME_BEAR:
-            # Eq. III.18: E_{24}[R_p - R_f] / max(sqrt(E_{24}[min(0, R_p - R_f)^2]), ε_dd) - λ_cost * Cost_t
-            arr = np.asarray(ret_win, dtype=np.float64)
-            downside = np.minimum(0.0, arr)
-            dd = float(np.sqrt(np.mean(downside * downside)))
-            sortino_step = float(np.mean(arr)) / max(dd, bear_dd_floor)
-            # Clip extreme dimensionless ratio for numerical stability while preserving Eq. III.18
-            rewards[t] = float(np.clip(sortino_step, -10.0, 10.0)) - bear_cost_penalty * cost_t
-        else:
-            # Eq. III.19: Sideways return minus explicit turnover penalty C * |w_t - w_{t-1}|
-            rewards[t] = r_port - sideways_turnover_penalty * turnover
+    prev_w = np.empty(n, dtype=np.float64)
+    prev_w[0] = 0.0
+    if n > 1:
+        prev_w[1:] = w[:-1]
 
-        prev_w = w_t
+    turnover = np.abs(w - prev_w)
+    cost = c_rate * turnover
+    net_returns = w * r_mkt - cost
+
+    if regime_id == REGIME_BULL:
+        rewards = np.log(np.maximum(1.0 + net_returns, 1e-6))
+    elif regime_id == REGIME_BEAR:
+        excess = net_returns - hourly_rf
+        downside_sq = np.minimum(0.0, excess) ** 2
+        csum_ex = np.concatenate(([0.0], np.cumsum(excess)))
+        csum_dn = np.concatenate(([0.0], np.cumsum(downside_sq)))
+        idx_end = np.arange(1, n + 1)
+        idx_start = np.maximum(0, idx_end - int(bear_window))
+        cnt = (idx_end - idx_start).astype(np.float64)
+        mean_ex = (csum_ex[idx_end] - csum_ex[idx_start]) / cnt
+        dd = np.sqrt(np.maximum((csum_dn[idx_end] - csum_dn[idx_start]) / cnt, 0.0))
+        sortino_step = mean_ex / np.maximum(dd, bear_dd_floor)
+        rewards = np.clip(sortino_step, -10.0, 10.0) - bear_cost_penalty * cost
+    else:
+        rewards = net_returns - sideways_turnover_penalty * turnover
 
     return rewards.astype(np.float32), net_returns.astype(np.float32)
 
@@ -140,8 +144,10 @@ class RegimePPOExpert:
 
         self.actor = _MLPHead(state_dim, hidden_dims, action_dim).to(self.device)
         self.critic = _MLPHead(state_dim, hidden_dims, 1).to(self.device)
+        self.lr_actor = lr_actor
         self.opt_actor = torch.optim.AdamW(self.actor.parameters(), lr=lr_actor)
         self.opt_critic = torch.optim.AdamW(self.critic.parameters(), lr=lr_critic)
+        self.last_training_logs_: List[Dict[str, object]] = []
 
     @torch.no_grad()
     def predict_probs(self, states_x: np.ndarray) -> np.ndarray:
@@ -176,7 +182,9 @@ class RegimePPOExpert:
         """
         Train this expert on bars matching its regime inside the training fold
         (falls back to full training fold if fewer than 32 bars match its regime).
+        Populates `self.last_training_logs_` with per-rollout convergence diagnostics.
         """
+        self.last_training_logs_ = []
         if regime_mask is not None and int(np.sum(regime_mask)) >= 32:
             idx = np.where(regime_mask)[0]
             s_arr = states[idx]
@@ -191,6 +199,9 @@ class RegimePPOExpert:
         if n < 4:
             return []
 
+        for pg in self.opt_actor.param_groups:
+            pg["lr"] = self.lr_actor
+            pg.pop("initial_lr", None)
         sched_actor = torch.optim.lr_scheduler.CosineAnnealingLR(
             self.opt_actor, T_max=max(1, total_rollouts)
         )
@@ -207,12 +218,20 @@ class RegimePPOExpert:
             with torch.no_grad():
                 logits = self.actor(s_tensor)
                 dist = torch.distributions.Categorical(logits=logits)
+                rollout_entropy = float(dist.entropy().mean().item())
                 actions = dist.sample()
+                greedy_actions = torch.argmax(logits, dim=-1)
                 old_log_probs = dist.log_prob(actions)
                 values = self.critic(s_tensor).squeeze(-1)
 
             act_np = actions.cpu().numpy()
+            greedy_np = greedy_actions.cpu().numpy()
             weights_np = ACTION_WEIGHTS[act_np]
+            greedy_weights_np = ACTION_WEIGHTS[greedy_np]
+
+            sampled_turnover = float(np.mean(np.abs(np.diff(weights_np, prepend=0.0))))
+            greedy_turnover = float(np.mean(np.abs(np.diff(greedy_weights_np, prepend=0.0))))
+
             rewards_np, _ = compute_regime_rewards(
                 regime_id=self.regime_id,
                 bar_asset_returns=r_arr,
@@ -223,24 +242,23 @@ class RegimePPOExpert:
                 bear_cost_penalty=bear_cost_penalty,
                 sideways_turnover_penalty=sideways_turnover_penalty,
             )
-            mean_rewards.append(float(np.mean(rewards_np)))
+            m_rew = float(np.mean(rewards_np))
+            mean_rewards.append(m_rew)
 
             val_np = values.cpu().numpy()
-            deltas = np.zeros(n, dtype=np.float32)
-            advantages = np.zeros(n, dtype=np.float32)
-            gae = 0.0
-            for t in reversed(range(n)):
-                next_v = val_np[t + 1] if t + 1 < n else 0.0
-                delta = rewards_np[t] + self.gamma * next_v - val_np[t]
-                deltas[t] = delta
-                gae = delta + self.gamma * self.gae_lambda * gae
-                advantages[t] = gae
+            deltas = np.empty(n, dtype=np.float32)
+            deltas[:-1] = rewards_np[:-1] + self.gamma * val_np[1:] - val_np[:-1]
+            deltas[-1] = rewards_np[-1] - val_np[-1]
+
+            gl = float(self.gamma * self.gae_lambda)
+            advantages = lfilter(
+                [1.0], [1.0, -gl], deltas[::-1].astype(np.float64)
+            )[::-1].astype(np.float32)
 
             returns_np = advantages + val_np
             adv_std = float(np.std(advantages))
             norm_adv = (advantages - float(np.mean(advantages))) / max(adv_std, 1e-6)
 
-            # Build fresh On-Policy Segment-Tree PER for this rollout buffer ONLY
             per = SegmentTreePERBuffer(alpha=self.per_alpha)
             per.build_from_td_errors(deltas)
 
@@ -250,6 +268,10 @@ class RegimePPOExpert:
             self.actor.train()
             self.critic.train()
             batches_per_epoch = max(1, (n + self.minibatch_size - 1) // self.minibatch_size)
+
+            sum_v_loss = 0.0
+            sum_a_loss = 0.0
+            n_updates = 0
 
             for _ in range(self.ppo_epochs):
                 for _ in range(batches_per_epoch):
@@ -265,11 +287,12 @@ class RegimePPOExpert:
                     ratio = torch.exp(new_lp - old_log_probs[b_idx_t])
                     surr1 = ratio * adv_t[b_idx_t]
                     surr2 = torch.clamp(ratio, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * adv_t[b_idx_t]
-                    actor_loss = -(w_t * torch.min(surr1, surr2)).mean() - self.entropy_coef * entropy.mean()
+                    actor_loss = -(w_t * (torch.min(surr1, surr2) + self.entropy_coef * entropy)).mean()
 
                     pred_v = self.critic(s_tensor[b_idx_t]).squeeze(-1)
                     td_new = (ret_t[b_idx_t] - pred_v).detach().cpu().numpy()
-                    critic_loss = self.value_coef * (w_t * (pred_v - ret_t[b_idx_t]).pow(2)).mean()
+                    raw_v_mse = (w_t * (pred_v - ret_t[b_idx_t]).pow(2)).mean()
+                    critic_loss = self.value_coef * raw_v_mse
 
                     self.opt_actor.zero_grad()
                     actor_loss.backward()
@@ -283,6 +306,24 @@ class RegimePPOExpert:
 
                     per.update_priorities(b_idx, td_new)
 
+                    sum_v_loss += float(raw_v_mse.item())
+                    sum_a_loss += float(actor_loss.item())
+                    n_updates += 1
+
             sched_actor.step()
+
+            greedy_counts = np.bincount(greedy_np, minlength=self.action_dim)
+            self.last_training_logs_.append(
+                {
+                    "rollout": int(r_step + 1),
+                    "mean_reward": round(m_rew, 6),
+                    "policy_entropy": round(rollout_entropy, 5),
+                    "mean_turnover": round(sampled_turnover, 5),
+                    "greedy_mean_turnover": round(greedy_turnover, 5),
+                    "value_loss": round(sum_v_loss / max(n_updates, 1), 6),
+                    "actor_loss": round(sum_a_loss / max(n_updates, 1), 6),
+                    "greedy_action_dist": [round(float(c) / n, 4) for c in greedy_counts],
+                }
+            )
 
         return mean_rewards

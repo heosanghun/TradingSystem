@@ -96,7 +96,7 @@ class XGBoostRegimeClassifier:
         initial_regime: int = REGIME_SIDEWAYS,
     ) -> np.ndarray:
         """
-        Exact Eq. (III.16):
+        Implements Eq. (III.16):
           R_t = argmax_R P(R | s_t) if max_R P(R | s_t) >= threshold else R_{t-1}
         """
         n = len(probs_n3)

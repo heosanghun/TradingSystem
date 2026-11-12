@@ -1,9 +1,8 @@
 """
-Typed configuration loader strictly matching Appendix A (Tables A.1–A.4)
-and Chapter VI of `[개정본] 박사논문_개정본_본보기_261110.pdf`.
+Typed configuration loader aligned with Appendix A (Tables A.1-A.4) and Chapter VI.
 
 Uses JSON (`configs/appendix_a_config.json`) so no `.yaml`/`.yml`/`.config` files
-are ever touched or modified.
+are touched or modified.
 """
 
 from __future__ import annotations
@@ -47,6 +46,7 @@ class Study1PPOConfig:
     value_coef: float = 0.5
     minibatch_size: int = 1024
     rollout_steps: int = 2048
+    default_rollouts_per_fold: int = 64
     ppo_epochs: int = 4
     per_alpha: float = 0.6
     per_beta_start: float = 0.4
