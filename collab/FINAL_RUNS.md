@@ -30,3 +30,14 @@ C:/Project/TradingSystem/.venv/Scripts/python.exe scripts/run_study1.py <인자>
 - 대장 병합은 CC가 합니다. 실행한 에이전트는 체크아웃의 `ledger/numbers.csv` 경로를 인계 기록에 적어 둡니다.
 - `.git`에 쓸 수 없는 에이전트(CX)는 1번의 `checkout`을 CC에게 요청합니다.
 - 체크아웃 안의 파일은 고치지 않습니다. 수정은 본 폴더에서 하고 커밋한 뒤 다시 체크아웃합니다.
+
+## R-2 (연구 2) 실행 명령
+
+`C:/Project/TradingSystem_final`에서, `PYTHONPATH`를 그 체크아웃의 `src`로 두고 `TS_SMOKE_RUN`은 비운 채 실행합니다. Ollama 서버가 떠 있어야 합니다.
+
+```
+C:/Project/TradingSystem/.venv/Scripts/python.exe scripts/run_study2.py --debate-stride 4 --counterfactual-every 2 --edge-top-k 30 --llm-backend ollama --llm-endpoint http://localhost:11434/api/chat --llm-model deepseek-r1:32b
+```
+
+- 중단되면 같은 커밋에서 같은 명령을 다시 실행합니다. `runs/study2/checkpoint.sqlite`에서 이어집니다. 코드나 인자가 바뀌면 체크포인트 식별자가 달라져 처음부터 다시 돕니다(LLM 응답 캐시는 남아 있어 이미 받은 응답은 재사용).
+- 진행 상황은 로그의 `[Study 2] bar ...` 줄(토론 50봉마다)에 남습니다.
