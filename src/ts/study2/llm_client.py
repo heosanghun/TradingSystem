@@ -37,6 +37,19 @@ JSON_OBJ_RE = re.compile(r"\{.*\}", flags=re.DOTALL)
 LOGGER = logging.getLogger(__name__)
 
 
+class TruncatedResponseError(ValueError):
+    """The answer reached the output token limit before the JSON object was closed."""
+
+
+# Added to the user prompt only after an answer was cut off. The role prompt and the token
+# limit stay as they are; the model is told why its answer was unusable and asked for a
+# shorter one in the same schema.
+LENGTH_NOTICE = (
+    "\n[Length limit] Your previous answer was cut off at the output token limit. "
+    "Answer again with the same JSON schema and keep the rationale within two sentences."
+)
+
+
 class LLMCallError(RuntimeError):
     """Transport or response parsing failed after the configured retries."""
 
@@ -177,11 +190,14 @@ class LLMClient:
         teacher latency benchmark. Permanent failures are explicit exceptions.
         """
         self.telemetry["logical_calls"] += 1
+        was_truncated = False
         for attempt in range(self.max_request_attempts):
             try:
-                parsed = self._generate_json_once(role, system_prompt, user_prompt,
-                                                  retry_attempt, context_hint,
-                                                  use_cache and self.use_cache)
+                parsed = self._generate_json_once(
+                    role, system_prompt, user_prompt + (LENGTH_NOTICE if was_truncated else ""),
+                    retry_attempt, context_hint, use_cache and self.use_cache)
+                if was_truncated:
+                    self.telemetry["answers_after_length_notice"] += 1
                 validate_role_payload(role, parsed)
                 return parsed
             except (requests.RequestException, ValueError, KeyError, IndexError, TypeError) as exc:
@@ -190,6 +206,7 @@ class LLMClient:
                                role, attempt + 1, self.max_request_attempts, type(exc).__name__,
                                str(exc)[:160])
                 self.telemetry["failed_" + type(exc).__name__] += 1
+                was_truncated = was_truncated or isinstance(exc, TruncatedResponseError)
                 if attempt + 1 == self.max_request_attempts:
                     self.telemetry["failed_calls"] += 1
                     raise LLMCallError(f"{role}: {type(exc).__name__} after {attempt+1} attempts") from exc
@@ -285,7 +302,7 @@ class LLMClient:
             if body.get("done_reason") == "length":
                 # The answer hit the token limit. A cut-off JSON object is not an answer.
                 self.telemetry["truncated_responses"] += 1
-                raise ValueError("Response truncated at the output token limit")
+                raise TruncatedResponseError("Response truncated at the output token limit")
             text = body["message"]["content"]
             parsed = extract_json_object(text)
         elif self.backend == "deterministic_econometric":
