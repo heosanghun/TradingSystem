@@ -35,9 +35,13 @@ from ts.study2.causality import discover_candidate_edges
 from ts.study2.citation_verifier import CitationVerifier
 from ts.study2.debate import GroundedDebateEngine
 from ts.study2.hypergraph import build_daily_hypergraph
-from ts.study2.llm_client import LLMClient
 from ts.study3.distillation import StudentDistillationTrainer
 from ts.study3.teacher_signal import FinBERTReasoningEncoder, build_aligned_distillation_dataset
+
+try:
+    from test_study2_pipeline import EconometricTestClient as LLMClient
+except ImportError:
+    from tests.test_study2_pipeline import EconometricTestClient as LLMClient  # type: ignore[no-redef]
 
 
 def test_complete_fig1_end_to_end_dataflow() -> None:
@@ -105,7 +109,7 @@ def test_complete_fig1_end_to_end_dataflow() -> None:
     # -------------------------------------------------------------------------
     # 2. Offline System 2 Teacher — Study 1 (Multimodal Regime Ensemble RL)
     # -------------------------------------------------------------------------
-    charts = CandlestickChartRenderer(window_bars=60, image_size=224).render_series_batch(df_ohlcv)
+    charts = CandlestickChartRenderer(window_bars=60, image_size=224).render_series_uint8(df_ohlcv)
     tech_x = TechnicalIndicatorCalculator(zscore_window=30).compute(df_ohlcv).to_numpy(dtype=np.float32)
     senti_x = news_store.build_hourly_sentiment_summary(idx, ewma_span_bars=24).to_numpy(dtype=np.float32)
 
@@ -114,10 +118,10 @@ def test_complete_fig1_end_to_end_dataflow() -> None:
     )
     encoder = MultimodalStateEncoder(pretrained_resnet=False)
     encoder.pretrain_on_fold_regimes(
-        charts[tr_slice], tech_x[tr_slice], senti_x[tr_slice], tr_labels, epochs=1, batch_size=32, device=torch.device("cpu")
+        charts, tech_x, senti_x, tr_labels, epochs=1, batch_size=32, device=torch.device("cpu"), indices=tr_slice
     )
-    tr_states, _ = encoder.encode_dataset(charts[tr_slice], tech_x[tr_slice], senti_x[tr_slice], device=torch.device("cpu"))
-    te_states, _ = encoder.encode_dataset(charts[te_slice], tech_x[te_slice], senti_x[te_slice], device=torch.device("cpu"))
+    tr_states, _ = encoder.encode_dataset(charts, tech_x, senti_x, device=torch.device("cpu"), indices=tr_slice)
+    te_states, _ = encoder.encode_dataset(charts, tech_x, senti_x, device=torch.device("cpu"), indices=te_slice)
     assert tr_states.shape == (len(tr_slice), 128)
     assert te_states.shape == (len(te_slice), 128)
 
@@ -223,7 +227,7 @@ def test_complete_fig1_end_to_end_dataflow() -> None:
     target_weights = ACTION_WEIGHTS[online_actions.numpy()]
     assert set(np.round(target_weights, 2).tolist()).issubset({-1.0, -0.5, 0.0, 0.5, 1.0})
 
-    bt_res = CausalPortfolioBacktester(initial_capital=10_000.0).run(
+    bt_res = CausalPortfolioBacktester(initial_capital=10_000.0).run_decisions(
         df_ohlcv.iloc[te_slice], target_weights, phase=2
     )
     assert len(bt_res.equity_curve) == len(te_slice)

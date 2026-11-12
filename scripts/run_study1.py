@@ -27,7 +27,7 @@ from ts.eval.backtester import CausalPortfolioBacktester
 from ts.eval.cost_model import compute_phase2_bar_base_cost_rates
 from ts.eval.shap_analysis import ModalitySHAPResult, compute_modality_kernel_shap
 from ts.eval.walk_forward import generate_phase2_walk_forward_folds
-from ts.ledger import NumberLedger
+from ts.ledger import NumberLedger, RunContext
 from ts.study1.chart_renderer import CandlestickChartRenderer
 from ts.study1.encoders import MultimodalStateEncoder, TechnicalIndicatorCalculator
 from ts.study1.ensemble import DynamicRegimeEnsemble
@@ -41,6 +41,7 @@ def main() -> None:
     parser.add_argument("--config", type=str, default=str(DEFAULT_CONFIG_PATH))
     parser.add_argument("--news-file", type=str, default="", help="Optional CSV/Parquet news archive with published_at & headline.")
     parser.add_argument("--offline-finbert-hash", action="store_true", help="Skip HuggingFace FinBERT download when scoring raw headlines offline.")
+    parser.add_argument("--no-pretrained-resnet", action="store_true", help="Disable ImageNet pretrained ResNet-18 weights (for offline unit tests only).")
     parser.add_argument("--pretrain-epochs", type=int, default=4)
     parser.add_argument("--ppo-rollouts", type=int, default=8)
     args = parser.parse_args()
@@ -81,7 +82,11 @@ def main() -> None:
         window_bars=cfg.study1_encoders.candlestick_window_bars,
         image_size=cfg.study1_encoders.image_size,
     )
-    charts_all = chart_renderer.render_series_batch(df_all)
+    charts_all = chart_renderer.render_series_uint8(df_all)
+    print(
+        f"[Study 1] Chart uint8 buffer allocated: shape={charts_all.shape}, "
+        f"dtype={charts_all.dtype}, nbytes={charts_all.nbytes / (1024 ** 3):.2f} GiB"
+    )
     tech_df = TechnicalIndicatorCalculator(zscore_window=cfg.study1_encoders.tech_zscore_window).compute(df_all)
     tech_all = tech_df.to_numpy(dtype=np.float32)
     senti_df = news_store.build_hourly_sentiment_summary(
@@ -142,17 +147,18 @@ def main() -> None:
         tr_labels = labeler.fit_label_train_fold(df_all["close"].iloc[tr_idx])
 
         # 2. Fold-local encoder auxiliary pretraining -> freeze
-        encoder = MultimodalStateEncoder(pretrained_resnet=False)
+        encoder = MultimodalStateEncoder(pretrained_resnet=not args.no_pretrained_resnet)
         encoder.pretrain_on_fold_regimes(
-            chart_imgs=charts_all[tr_idx],
-            tech_x=tech_all[tr_idx],
-            senti_x=senti_all[tr_idx],
+            chart_imgs=charts_all,
+            tech_x=tech_all,
+            senti_x=senti_all,
             regime_labels=tr_labels,
             epochs=args.pretrain_epochs,
             device=device,
+            indices=tr_idx,
         )
-        tr_states, _ = encoder.encode_dataset(charts_all[tr_idx], tech_all[tr_idx], senti_all[tr_idx], device=device)
-        te_states, te_concat_mods = encoder.encode_dataset(charts_all[te_idx], tech_all[te_idx], senti_all[te_idx], device=device)
+        tr_states, _ = encoder.encode_dataset(charts_all, tech_all, senti_all, device=device, indices=tr_idx)
+        te_states, te_concat_mods = encoder.encode_dataset(charts_all, tech_all, senti_all, device=device, indices=te_idx)
 
         # 3. XGBoost regime classifier with theta = 0.60 hysteresis
         clf = XGBoostRegimeClassifier(
@@ -376,8 +382,15 @@ def main() -> None:
     }
     (out_dir / "metrics.json").write_text(json.dumps(metrics_payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    # Record into `ledger/numbers.csv` (including all 5 blanks of Table 6.12 & all 9 blanks of Table 6.13!)
-    ledger = NumberLedger()
+    run_ctx = RunContext(
+        stage="study1",
+        flags={
+            "finbert_offline_hash": bool(args.offline_finbert_hash),
+            "quick_verify": False,
+            "reduced_training_budget": bool(args.ppo_rollouts < getattr(cfg.study1_ppo, "default_rollouts_per_fold", 8) or args.pretrain_epochs < 4),
+        },
+    )
+    ledger = NumberLedger(run_context=run_ctx)
     rec_kw = dict(script_path=script_rel, config_sha256=cfg.config_sha256, run_log_path=log_path)
 
     ledger.record("T6.9_SHAP_VISUAL_PCT", "Table 6.9", "Period II SHAP Visual share", vis_mean, "{:.2f}", "%", **rec_kw)

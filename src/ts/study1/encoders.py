@@ -1,18 +1,19 @@
 """
-Study 1 Multimodal Feature Encoders & 2-Token Cross-Modal Attention (Ch. III Sec 1).
+Study 1 multimodal feature encoders and 2-token cross-modal attention (Chapter III Sec 1).
 
-Implements exact equations from `[개정본] 박사논문_개정본_본보기_261110.pdf`:
-- Visual (`128-d`): ResNet-18 + CBAM (`r=16`, `7x7` spatial conv, Eq. III.2–III.3, Table 3.1)
-- Technical (`64-d`): MACD(12,26,9), RSI(14), Wilder ATR(14) + causal Z-score indicators (Eq. III.4–III.6)
-- Sentiment (`32-d`): 24h EWMA (`alpha=0.08`, Eq. III.7–III.8) + 24h window statistics -> Linear + LayerNorm
-- Cross-Modal Fusion (`128-d`): Sentiment = Query (`1×128`), `[Visual, Tech]` = Key/Value (`2×128`),
-  `s_t = LayerNorm(Q + softmax(Q K^T / sqrt(128)) V)` (Eq. III.9–III.12)
-- Fold-local Auxiliary Regime Pretrainer: Trains encoder weights strictly on each training fold's
-  regime labels before freezing for XGBoost & PPO (resolves Issue #9 in `구현계획_261111.md`).
+Implements the equations in the revised thesis:
+- Visual (`128-d`): ImageNet-pretrained ResNet-18 + CBAM (`r=16`, `7x7` spatial conv, Eq. III.2-III.3, Table 3.1)
+- Technical (`64-d`): MACD(12,26,9), RSI(14), Wilder ATR(14) and causal rolling Z-score indicators (Eq. III.4-III.6)
+- Sentiment (`32-d`): 24h EWMA (`alpha=0.08`, Eq. III.7-III.8) and 24h window statistics -> Linear + LayerNorm
+- Cross-Modal Fusion (`128-d`): Sentiment = Query (`1x128`), `[Visual, Tech]` = Key/Value (`2x128`),
+  `s_t = LayerNorm(Q + softmax(Q K^T / sqrt(128)) V)` (Eq. III.9-III.12)
+- Fold-local auxiliary regime pretraining: trains encoder parameters strictly on each training fold's
+  purged regime labels before freezing for XGBoost and PPO.
 """
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Optional, Tuple
 
@@ -23,10 +24,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import ResNet18_Weights, resnet18
 
+from ts.study1.chart_renderer import normalize_chart_batch_to_tensor
+
+logger = logging.getLogger(__name__)
+
 
 class CBAMBlock(nn.Module):
     """
-    Convolutional Block Attention Module (Woo et al.; Thesis Eq. III.2–III.3).
+    Convolutional Block Attention Module (Woo et al.; Thesis Eq. III.2-III.3).
     """
 
     def __init__(self, channels: int = 512, reduction: int = 16, spatial_kernel: int = 7) -> None:
@@ -41,7 +46,6 @@ class CBAMBlock(nn.Module):
         self.spatial_conv = nn.Conv2d(2, 1, kernel_size=spatial_kernel, padding=padding, bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (B, C, H, W)
         b, c, _, _ = x.shape
         avg_pool = F.adaptive_avg_pool2d(x, 1).view(b, c)
         max_pool = F.adaptive_max_pool2d(x, 1).view(b, c)
@@ -62,11 +66,17 @@ class VisualResNetCBAMEncoder(nn.Module):
         out_dim: int = 128,
         cbam_reduction: int = 16,
         spatial_kernel: int = 7,
-        pretrained: bool = False,
+        pretrained: bool = True,
     ) -> None:
         super().__init__()
-        weights = ResNet18_Weights.DEFAULT if pretrained else None
+        self.pretrained = bool(pretrained)
+        weights = ResNet18_Weights.IMAGENET1K_V1 if self.pretrained else None
+        self.pretrained_weights_name = "IMAGENET1K_V1" if self.pretrained else "none"
         backbone = resnet18(weights=weights)
+        if self.pretrained:
+            msg = f"[Study 1] Loaded ResNet-18 pretrained weights ({self.pretrained_weights_name})."
+            logger.info(msg)
+            print(msg)
         self.stem = nn.Sequential(backbone.conv1, backbone.bn1, backbone.relu, backbone.maxpool)
         self.layer1 = backbone.layer1
         self.layer2 = backbone.layer2
@@ -81,17 +91,16 @@ class VisualResNetCBAMEncoder(nn.Module):
         )
 
     def forward(self, img: torch.Tensor) -> torch.Tensor:
-        # img: (B, 3, 224, 224)
         f = self.stem(img)
-        f = self.layer4(self.layer3(self.layer2(self.layer1(f))))  # (B, 512, 7, 7)
+        f = self.layer4(self.layer3(self.layer2(self.layer1(f))))
         f = self.cbam(f)
-        f = self.gap(f).flatten(1)  # (B, 512)
-        return self.proj(f)         # (B, 128)
+        f = self.gap(f).flatten(1)
+        return self.proj(f)
 
 
 class TechnicalIndicatorCalculator:
     """
-    Computes strictly causal hourly technical indicators (Eq. III.4–III.6 + momentum/vol context)
+    Computes causal hourly technical indicators (Eq. III.4-III.6 and momentum/volatility context)
     and applies trailing window Z-score standardization (`window = 120` bars).
     Produces 16 standardized numerical features per bar.
     """
@@ -113,14 +122,12 @@ class TechnicalIndicatorCalculator:
         l = ohlcv_df["low"].astype(np.float64)
         v = ohlcv_df["volume"].astype(np.float64)
 
-        # Eq. III.4: MACD(12, 26, 9)
         ema12 = c.ewm(span=12, adjust=False).mean()
         ema26 = c.ewm(span=26, adjust=False).mean()
         macd = (ema12 - ema26) / (c + eps)
         macd_sig = macd.ewm(span=9, adjust=False).mean()
         macd_hist = macd - macd_sig
 
-        # Eq. III.5: Wilder RSI(14)
         delta = c.diff().fillna(0.0)
         gain = delta.clip(lower=0.0)
         loss = (-delta).clip(lower=0.0)
@@ -129,13 +136,11 @@ class TechnicalIndicatorCalculator:
         rs = avg_gain / (avg_loss + eps)
         rsi_14 = (100.0 - (100.0 / (1.0 + rs))) / 100.0
 
-        # Eq. III.6: Wilder ATR(14)
         prev_c = c.shift(1).fillna(c)
         tr = pd.concat([(h - l), (h - prev_c).abs(), (l - prev_c).abs()], axis=1).max(axis=1)
         atr_14 = tr.ewm(alpha=1.0 / 14.0, adjust=False).mean()
         atr_14_pct = atr_14 / (c + eps)
 
-        # Additional causal price/volume context
         log_c = np.log(c.clip(lower=eps))
         ret_1h = log_c.diff(1).fillna(0.0)
         ret_4h = log_c.diff(4).fillna(0.0)
@@ -182,7 +187,6 @@ class TechnicalIndicatorCalculator:
             index=ohlcv_df.index,
         )
 
-        # Causal rolling Z-score standardization
         roll_mean = raw.rolling(self.zscore_window, min_periods=2).mean().fillna(raw)
         roll_std = raw.rolling(self.zscore_window, min_periods=2).std().fillna(1.0).replace(0.0, 1.0)
         z = ((raw - roll_mean) / (roll_std + 1e-6)).clip(-5.0, 5.0).fillna(0.0)
@@ -191,9 +195,9 @@ class TechnicalIndicatorCalculator:
 
 class CrossModalStateFusion(nn.Module):
     """
-    2-Token Cross-Modal Attention (Eq. III.9–III.12):
+    2-Token Cross-Modal Attention (Eq. III.9-III.12):
     - Query `Q`: projected from Sentiment (`32 -> 128`), shape `(B, 1, 128)`
-    - Key `K` & Value `V`: token-specific projections from Visual (`128 -> 128`)
+    - Key `K` and Value `V`: token-specific projections from Visual (`128 -> 128`)
       and Technical (`64 -> 128`), stacked to `(B, 2, 128)`
     - Residual + LayerNorm: `s_t = LayerNorm(Q + A @ V)` -> `(B, 128)`
     """
@@ -217,14 +221,14 @@ class CrossModalStateFusion(nn.Module):
     def forward_with_weights(
         self, f_visual: torch.Tensor, f_tech: torch.Tensor, f_senti: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        q = self.w_q(f_senti).unsqueeze(1)  # (B, 1, 128)
-        k = torch.stack([self.w_k_vis(f_visual), self.w_k_tech(f_tech)], dim=1)  # (B, 2, 128)
-        v = torch.stack([self.w_v_vis(f_visual), self.w_v_tech(f_tech)], dim=1)  # (B, 2, 128)
+        q = self.w_q(f_senti).unsqueeze(1)
+        k = torch.stack([self.w_k_vis(f_visual), self.w_k_tech(f_tech)], dim=1)
+        v = torch.stack([self.w_v_vis(f_visual), self.w_v_tech(f_tech)], dim=1)
 
-        scores = torch.bmm(q, k.transpose(1, 2)) / math.sqrt(self.d_model)  # (B, 1, 2)
-        attn_weights = F.softmax(scores, dim=-1)                            # (B, 1, 2), sum == 1
-        h_cross = torch.bmm(attn_weights, v)                                # (B, 1, 128)
-        s_t = self.norm(q + h_cross).squeeze(1)                             # (B, 128)
+        scores = torch.bmm(q, k.transpose(1, 2)) / math.sqrt(self.d_model)
+        attn_weights = F.softmax(scores, dim=-1)
+        h_cross = torch.bmm(attn_weights, v)
+        s_t = self.norm(q + h_cross).squeeze(1)
         return s_t, attn_weights.squeeze(1)
 
     def forward(
@@ -236,8 +240,8 @@ class CrossModalStateFusion(nn.Module):
 
 class MultimodalStateEncoder(nn.Module):
     """
-    Unified Study 1 Encoder producing `s_t ∈ R^128` (plus individual modality embeddings
-    `f_visual ∈ R^128`, `f_tech ∈ R^64`, `f_senti ∈ R^32` for KernelSHAP Eq. VI.12).
+    Study 1 encoder producing `s_t` in `R^128` alongside individual modality vectors
+    `f_visual` in `R^128`, `f_tech` in `R^64`, and `f_senti` in `R^32`.
     """
 
     def __init__(
@@ -248,10 +252,16 @@ class MultimodalStateEncoder(nn.Module):
         d_tech: int = 64,
         d_senti: int = 32,
         d_state: int = 128,
-        pretrained_resnet: bool = False,
+        pretrained_resnet: bool = True,
     ) -> None:
         super().__init__()
-        self.visual_encoder = VisualResNetCBAMEncoder(out_dim=d_visual, pretrained=pretrained_resnet)
+        self.d_visual = d_visual
+        self.d_tech = d_tech
+        self.d_senti = d_senti
+        self.d_state = d_state
+        self.pretrained_resnet = bool(pretrained_resnet)
+
+        self.visual_encoder = VisualResNetCBAMEncoder(out_dim=d_visual, pretrained=self.pretrained_resnet)
         self.tech_encoder = nn.Sequential(
             nn.Linear(tech_in_dim, d_tech),
             nn.ReLU(inplace=True),
@@ -291,34 +301,51 @@ class MultimodalStateEncoder(nn.Module):
         batch_size: int = 64,
         lr: float = 3e-4,
         device: Optional[torch.device] = None,
+        indices: Optional[np.ndarray] = None,
     ) -> list[float]:
         """
-        Fold-local auxiliary pretraining (`구현계획_261111.md` Sec 4 #9 & Sec 6.3 WP2):
-        Trains encoder + fusion parameters strictly on the training fold's regime labels,
-        then freezes the encoder prior to XGBoost and PPO training.
+        Fold-local auxiliary pretraining: trains encoder and fusion parameters strictly on the
+        training fold's purged regime labels, then freezes the encoder prior to XGBoost and PPO.
+        When `indices` is supplied, minibatches slice `chart_imgs`, `tech_x`, and `senti_x` directly
+        without allocating a fold-sized copy of `chart_imgs`.
         """
         dev = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.to(dev)
         self.train()
         opt = torch.optim.AdamW(self.parameters(), lr=lr, weight_decay=1e-4)
 
-        valid_mask = regime_labels >= 0
-        idx_all = np.where(valid_mask)[0]
+        if indices is not None:
+            fold_idx = np.asarray(indices, dtype=np.int64)
+            fold_labels = (
+                regime_labels
+                if len(regime_labels) == len(fold_idx)
+                else regime_labels[fold_idx]
+            )
+        else:
+            fold_idx = None
+            fold_labels = regime_labels
+
+        valid_local = np.where(fold_labels >= 0)[0]
         losses: list[float] = []
-        if len(idx_all) == 0:
+        if len(valid_local) == 0:
+            self.eval()
+            for p in self.parameters():
+                p.requires_grad_(False)
             return losses
 
         rng = np.random.default_rng(42)
         for _ in range(epochs):
-            perm = rng.permutation(idx_all)
+            perm = rng.permutation(valid_local)
             ep_loss = 0.0
             n_batches = 0
             for s in range(0, len(perm), batch_size):
-                b_idx = perm[s : s + batch_size]
-                imgs_t = torch.tensor(chart_imgs[b_idx], dtype=torch.float32, device=dev)
-                tech_t = torch.tensor(tech_x[b_idx], dtype=torch.float32, device=dev)
-                senti_t = torch.tensor(senti_x[b_idx], dtype=torch.float32, device=dev)
-                y_t = torch.tensor(regime_labels[b_idx], dtype=torch.long, device=dev)
+                b_local = perm[s : s + batch_size]
+                b_src = fold_idx[b_local] if fold_idx is not None else b_local
+
+                imgs_t = normalize_chart_batch_to_tensor(chart_imgs[b_src], dev)
+                tech_t = torch.tensor(tech_x[b_src], dtype=torch.float32, device=dev)
+                senti_t = torch.tensor(senti_x[b_src], dtype=torch.float32, device=dev)
+                y_t = torch.tensor(fold_labels[b_local], dtype=torch.long, device=dev)
 
                 opt.zero_grad()
                 state = self.forward(imgs_t, tech_t, senti_t)
@@ -345,24 +372,28 @@ class MultimodalStateEncoder(nn.Module):
         senti_x: np.ndarray,
         batch_size: int = 128,
         device: Optional[torch.device] = None,
+        indices: Optional[np.ndarray] = None,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Batch-encode `(N, 128)` fused states `s_t` and `(N, 224)` concatenated modality vectors
-        `[f_vis(128), f_tech(64), f_senti(32)]` (used for SHAP attribution Eq. VI.12).
+        `[f_vis(128), f_tech(64), f_senti(32)]` with minibatch-level uint8 normalization.
         """
         dev = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.to(dev)
         self.eval()
 
-        n = len(tech_x)
-        states = np.empty((n, self.fusion.d_model), dtype=np.float32)
-        concat_mods = np.empty((n, 128 + 64 + 32), dtype=np.float32)
+        fold_idx = np.asarray(indices, dtype=np.int64) if indices is not None else None
+        n = len(fold_idx) if fold_idx is not None else len(tech_x)
+        states = np.empty((n, self.d_state), dtype=np.float32)
+        concat_mods = np.empty((n, self.d_visual + self.d_tech + self.d_senti), dtype=np.float32)
 
         for s in range(0, n, batch_size):
             e = min(n, s + batch_size)
-            imgs_t = torch.tensor(chart_imgs[s:e], dtype=torch.float32, device=dev)
-            tech_t = torch.tensor(tech_x[s:e], dtype=torch.float32, device=dev)
-            senti_t = torch.tensor(senti_x[s:e], dtype=torch.float32, device=dev)
+            b_src = fold_idx[s:e] if fold_idx is not None else slice(s, e)
+
+            imgs_t = normalize_chart_batch_to_tensor(chart_imgs[b_src], dev)
+            tech_t = torch.tensor(tech_x[b_src], dtype=torch.float32, device=dev)
+            senti_t = torch.tensor(senti_x[b_src], dtype=torch.float32, device=dev)
 
             f_vis, f_tech, f_senti = self.extract_modalities(imgs_t, tech_t, senti_t)
             st = self.fusion(f_vis, f_tech, f_senti)
