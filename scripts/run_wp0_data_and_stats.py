@@ -19,7 +19,7 @@ from ts.data.macro_fetcher import MacroAssetFetcher
 from ts.eval.backtester import CausalPortfolioBacktester
 from ts.eval.latency_benchmark import benchmark_student_and_teacher_latency
 from ts.eval.metrics import compute_crisis_window_loss, compute_distribution_and_stationarity_stats
-from ts.ledger import NumberLedger
+from ts.ledger import NumberLedger, RunContext
 
 
 def main() -> None:
@@ -35,7 +35,7 @@ def main() -> None:
     log_path = "runs/wp0/metrics.json"
     script_rel = "scripts/run_wp0_data_and_stats.py"
 
-    ledger = NumberLedger()
+    ledger = NumberLedger(run_context=RunContext(stage="wp0"))
     binance = BinanceDataFetcher(cache_dir=cache_dir)
     macro = MacroAssetFetcher(cache_dir=cache_dir)
 
@@ -126,7 +126,19 @@ def main() -> None:
     ledger.record("T6.1_BTC_OBSERVED_BARS", "Table 6.1", "BTC observed 1h bars (2021.10-2023.12)", eval_gap_report["observed_bars"], "{:.0f}", "bars", **rec_kw)
     ledger.record("T6.1_BTC_MISSING_BARS", "Table 6.1", "BTC missing maintenance 1h bars", eval_gap_report["missing_bars"], "{:.0f}", "bars", **rec_kw)
 
-    for sym_key, st_d in [("BTC", btc_stats.to_dict()), ("SPY", control_stats["SPY"]), ("GLD", control_stats["GLD"])]:
+    # Table 6.2 is an hourly-bar table. A control asset available only at daily resolution
+    # stays in metrics.json but is not recorded as a Table 6.2 figure.
+    table_6_2_rows = [("BTC", btc_stats.to_dict())]
+    for ctrl_key in ("SPY", "GLD"):
+        ctrl_stats = control_stats.get(ctrl_key)
+        if ctrl_stats is None:
+            continue
+        if ctrl_stats.get("bar_resolution") == "1h":
+            table_6_2_rows.append((ctrl_key, ctrl_stats))
+        else:
+            print(f"[WP0] {ctrl_key} resolution is {ctrl_stats.get('bar_resolution')}, not 1h: not recorded in ledger.")
+
+    for sym_key, st_d in table_6_2_rows:
         ledger.record(f"T6.2_{sym_key}_N", "Table 6.2", f"{sym_key} log-return sample count", float(st_d["n_bars"]), "{:.0f}", "bars", **rec_kw)
         ledger.record(f"T6.2_{sym_key}_MEAN", "Table 6.2", f"{sym_key} log-return mean", float(st_d["mean"]), "{:.6f}", "", **rec_kw)
         ledger.record(f"T6.2_{sym_key}_STD", "Table 6.2", f"{sym_key} log-return std", float(st_d["std"]), "{:.4f}", "", **rec_kw)
@@ -154,6 +166,9 @@ def main() -> None:
     ledger.record("T6.14_STUDENT_MEDIAN_MS", "Table 6.14", "Student 1D-CNN online latency median", latency_report.student_online.median_ms, "{:.3f}", "ms", **rec_kw)
     ledger.record("T6.14_STUDENT_P99_MS", "Table 6.14", "Student 1D-CNN online latency p99", latency_report.student_online.p99_ms, "{:.3f}", "ms", **rec_kw)
 
+    not_final = ledger.reasons_not_final()
+    if not_final:
+        print("[WP0] Recorded to ledger/provisional.csv, not numbers.csv: " + "; ".join(not_final))
     print(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
