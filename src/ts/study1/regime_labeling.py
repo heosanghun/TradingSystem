@@ -19,8 +19,12 @@ Provides:
 
 from __future__ import annotations
 
+import math
+from typing import Optional
+
 import numpy as np
 import pandas as pd
+from numpy.lib.stride_tricks import sliding_window_view
 
 from ts.data.temporal_guard import assert_purged_train_horizon
 
@@ -82,17 +86,22 @@ class SMARegimeLabeler:
 
 class TrendScanningLabeler:
     """
-    Phase 2 Purged Forward Trend-Scanning Labeler (Ch. III Sec 2.1 & Ch. VI Sec 3.1).
+    Phase 2 Purged Forward Trend-Scanning Labeler (Ch. III Sec 2.1, Ch. VI Sec 3.1, Table A.2).
 
     For each bar `t` in the training fold where `t + horizon_max < len(train_close)`,
     evaluates OLS linear regression `log(P_{t+k}) = beta_0 + beta_1 * k + eps` across
-    candidate horizons `L ∈ [horizon_min, horizon_max]` (step `horizon_step`), selects
-    `L* = argmax_L |t_stat(beta_1)|`, and assigns:
-      - `t_stat > +t_threshold` -> Bull (`0`)
-      - `t_stat < -t_threshold` -> Bear (`1`)
-      - otherwise               -> Sideways (`2`)
+    candidate horizons `L in [horizon_min, horizon_max]` (step `horizon_step`), optionally
+    normalizes `t_stat(beta_1)` by `sqrt(L)` to remove unit-root horizon-length scaling bias,
+    and selects `L* = argmax_L |stat(L)|`.
+
+    Threshold selection (fitted strictly inside purged training bars, zero test access):
+      - When `trend_quantile` is set (default `0.60` per Appendix Table A.2, unless a fixed
+        `t_threshold` is explicitly passed without `trend_quantile`), `tau_trend_` is the
+        `trend_quantile` empirical quantile of `|stat(L*)|` on valid bars of `train_close`.
+      - Otherwise uses fixed `t_threshold`.
+
     Trailing bars `[len(train_close) - horizon_max .. len(train_close) - 1]` are marked `-1`
-    (purged) so zero test-fold prices are ever accessed.
+    (purged) so test-fold prices are never accessed.
     """
 
     def __init__(
@@ -100,12 +109,22 @@ class TrendScanningLabeler:
         horizon_min: int = 24,
         horizon_max: int = 120,
         horizon_step: int = 12,
-        t_threshold: float = 2.0,
+        t_threshold: Optional[float] = None,
+        trend_quantile: Optional[float] = 0.60,
+        unit_root_scale: bool = False,
     ) -> None:
         self.horizon_min = horizon_min
         self.horizon_max = horizon_max
         self.horizon_step = horizon_step
-        self.t_threshold = t_threshold
+        if t_threshold is not None and trend_quantile == 0.60:
+            # Explicit fixed threshold call (e.g. unit tests specifying t_threshold=1.8)
+            self.t_threshold: float = float(t_threshold)
+            self.trend_quantile: Optional[float] = None
+        else:
+            self.t_threshold = float(t_threshold) if t_threshold is not None else 2.0
+            self.trend_quantile = float(trend_quantile) if trend_quantile is not None else None
+        self.unit_root_scale = bool(unit_root_scale)
+        self.tau_trend_: float = float(self.t_threshold)
 
     def fit_label_train_fold(self, train_close: pd.Series) -> np.ndarray:
         n = len(train_close)
@@ -126,40 +145,43 @@ class TrendScanningLabeler:
 
         log_p = np.log(np.maximum(train_close.to_numpy(dtype=np.float64), 1e-8))
         last_valid_t = n - 1 - eff_max
-        if last_valid_t >= 0:
-            assert_purged_train_horizon(last_valid_t, eff_max, n)
+        if last_valid_t < 0:
+            return labels
+        assert_purged_train_horizon(last_valid_t, eff_max, n)
+        n_valid = last_valid_t + 1
 
-        # Precompute centered x vectors for each horizon L
-        x_cache = {}
+        best_stats = np.zeros(n_valid, dtype=np.float64)
+        best_abs = np.full(n_valid, -1.0, dtype=np.float64)
+
         for L in horizons:
             m = L + 1
             x = np.arange(m, dtype=np.float64)
-            x_centered = x - x.mean()
-            sxx = float(np.dot(x_centered, x_centered))
-            x_cache[L] = (m, x_centered, sxx)
+            x_c = x - x.mean()
+            sxx = float(np.dot(x_c, x_c))
+            dof = float(max(1, m - 2))
 
-        for t in range(max(0, last_valid_t + 1)):
-            best_t_stat = 0.0
-            best_abs = -1.0
-            for L in horizons:
-                m, x_c, sxx = x_cache[L]
-                y = log_p[t : t + m]
-                y_c = y - y.mean()
-                beta1 = float(np.dot(x_c, y_c)) / sxx
-                resid = y_c - beta1 * x_c
-                dof = max(1, m - 2)
-                s2 = float(np.dot(resid, resid)) / dof
-                se_beta1 = np.sqrt(max(s2 / sxx, 1e-16))
-                t_val = beta1 / se_beta1
-                if abs(t_val) > best_abs:
-                    best_abs = abs(t_val)
-                    best_t_stat = t_val
+            windows = sliding_window_view(log_p[: n_valid + L], m)[:n_valid]
+            y_c = windows - np.mean(windows, axis=1, keepdims=True)
+            beta1 = (y_c @ x_c) / sxx
+            resid = y_c - beta1[:, None] * x_c[None, :]
+            s2 = np.sum(resid * resid, axis=1) / dof
+            se_beta1 = np.sqrt(np.maximum(s2 / sxx, 1e-16))
+            stat_l = beta1 / se_beta1
+            if self.unit_root_scale:
+                stat_l = stat_l / math.sqrt(float(L))
 
-            if best_t_stat > self.t_threshold:
-                labels[t] = REGIME_BULL
-            elif best_t_stat < -self.t_threshold:
-                labels[t] = REGIME_BEAR
-            else:
-                labels[t] = REGIME_SIDEWAYS
+            abs_l = np.abs(stat_l)
+            better = abs_l > best_abs
+            best_abs = np.where(better, abs_l, best_abs)
+            best_stats = np.where(better, stat_l, best_stats)
 
+        if self.trend_quantile is not None and len(best_abs) > 0:
+            self.tau_trend_ = float(np.quantile(best_abs, self.trend_quantile))
+        else:
+            self.tau_trend_ = float(self.t_threshold)
+
+        valid_labels = np.full(n_valid, REGIME_SIDEWAYS, dtype=np.int64)
+        valid_labels[best_stats > self.tau_trend_] = REGIME_BULL
+        valid_labels[best_stats < -self.tau_trend_] = REGIME_BEAR
+        labels[:n_valid] = valid_labels
         return labels

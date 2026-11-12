@@ -61,6 +61,8 @@ class Study1PPOConfig:
     experts_per_regime: int = 5
     max_experts_per_regime_for_sensitivity: int = 7
     hidden_dims: Tuple[int, ...] = (128, 64)
+    include_prev_weight: bool = True
+    respect_segment_boundaries: bool = True
 
 
 @dataclass(frozen=True)
@@ -85,7 +87,11 @@ class Study1EncoderConfig:
     trend_scan_min_horizon: int = 24
     trend_scan_max_horizon: int = 120
     trend_scan_t_threshold: float = 2.0
+    trend_scan_use_quantile: bool = True
+    trend_scan_unit_root_scale: bool = False
     regime_switch_threshold: float = 0.60
+    regime_confirm_bars: int = 2
+    xgb_balance_classes: bool = False
     xgb_n_estimators: int = 300
     xgb_max_depth: int = 6
     xgb_learning_rate: float = 0.05

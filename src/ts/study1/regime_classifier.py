@@ -20,7 +20,7 @@ from ts.study1.regime_labeling import REGIME_SIDEWAYS
 
 
 class XGBoostRegimeClassifier:
-    """3-class XGBoost classifier + `theta = 0.60` confidence hysteresis gate."""
+    """3-class XGBoost classifier + confidence hysteresis gate."""
 
     def __init__(
         self,
@@ -28,12 +28,16 @@ class XGBoostRegimeClassifier:
         max_depth: int = 6,
         learning_rate: float = 0.05,
         switch_threshold: float = 0.60,
+        balance_classes: bool = True,
+        confirm_bars: int = 1,
         random_state: int = 42,
     ) -> None:
         self.n_estimators = n_estimators
         self.max_depth = max_depth
         self.learning_rate = learning_rate
         self.switch_threshold = switch_threshold
+        self.balance_classes = bool(balance_classes)
+        self.confirm_bars = max(1, int(confirm_bars))
         self.random_state = random_state
         self.model: Optional[xgb.XGBClassifier] = None
         self._constant_fallback_class: Optional[int] = None
@@ -55,9 +59,12 @@ class XGBoostRegimeClassifier:
             X = np.concatenate([X, pad_X], axis=0)
             y = np.concatenate([y, pad_y], axis=0)
 
-        counts = np.bincount(y, minlength=3).astype(np.float64)
-        inv_freq = len(y) / (3.0 * np.maximum(counts, 1.0))
-        sample_weights = inv_freq[y]
+        if self.balance_classes:
+            counts = np.bincount(y, minlength=3).astype(np.float64)
+            inv_freq = len(y) / (3.0 * np.maximum(counts, 1.0))
+            sample_weights: Optional[np.ndarray] = inv_freq[y]
+        else:
+            sample_weights = None
 
         self.model = xgb.XGBClassifier(
             n_estimators=self.n_estimators,
@@ -94,19 +101,36 @@ class XGBoostRegimeClassifier:
         probs_n3: np.ndarray,
         threshold: float = 0.60,
         initial_regime: int = REGIME_SIDEWAYS,
+        confirm_bars: int = 1,
     ) -> np.ndarray:
         """
-        Implements Eq. (III.16):
-          R_t = argmax_R P(R | s_t) if max_R P(R | s_t) >= threshold else R_{t-1}
+        Implements Eq. (III.16) with optional consecutive-bar confirmation (`confirm_bars >= 1`):
+          R_t switches to `argmax_R P(R | s_t)` once the candidate regime satisfies
+          `max_R P(R | s_t) >= threshold` for `confirm_bars` consecutive causal steps,
+          otherwise holds `R_{t-1}`.
         """
         n = len(probs_n3)
         regimes = np.empty(n, dtype=np.int64)
         cur = int(initial_regime)
+        req = max(1, int(confirm_bars))
+        pending_r = -1
+        pending_cnt = 0
         for t in range(n):
             p = probs_n3[t]
             best_r = int(np.argmax(p))
-            if float(p[best_r]) >= threshold:
-                cur = best_r
+            if best_r != cur and float(p[best_r]) >= threshold:
+                if best_r == pending_r:
+                    pending_cnt += 1
+                else:
+                    pending_r = best_r
+                    pending_cnt = 1
+                if pending_cnt >= req:
+                    cur = best_r
+                    pending_r = -1
+                    pending_cnt = 0
+            else:
+                pending_r = -1
+                pending_cnt = 0
             regimes[t] = cur
         return regimes
 
@@ -115,6 +139,9 @@ class XGBoostRegimeClassifier:
     ) -> tuple[np.ndarray, np.ndarray]:
         probs = self.predict_proba(states_x)
         regimes = self.apply_hysteresis_gate(
-            probs, threshold=self.switch_threshold, initial_regime=initial_regime
+            probs,
+            threshold=self.switch_threshold,
+            initial_regime=initial_regime,
+            confirm_bars=self.confirm_bars,
         )
         return regimes, probs
