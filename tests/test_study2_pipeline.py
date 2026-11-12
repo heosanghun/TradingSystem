@@ -545,3 +545,7 @@ def test_ollama_call_settings_and_truncation(monkeypatch) -> None:
     assert len(sent) == 2 and client.telemetry["truncated_responses"] == 1
     assert sent[0]["options"]["num_ctx"] == 4096 and sent[0]["options"]["num_predict"] == 256
     assert sent[0]["messages"][-1] == {"role": "assistant", "content": mod.EMPTY_THINK_PREFILL}
+    # After a cut-off answer the retry carries the length notice; the first request does not.
+    assert "[Length limit]" not in sent[0]["messages"][1]["content"]
+    assert "[Length limit]" in sent[1]["messages"][1]["content"]
+    assert client.telemetry["answers_after_length_notice"] == 1
