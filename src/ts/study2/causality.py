@@ -15,11 +15,19 @@ Implements Eqs. (IV.1)–(IV.4) & Table A.3:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import asdict
+import hashlib
+import json
+import logging
+from pathlib import Path
 from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
 from scipy import stats
+from scipy.linalg import lstsq, qr
+from scipy.spatial.distance import cdist
+from threadpoolctl import threadpool_limits
 
 
 @dataclass(frozen=True)
@@ -103,12 +111,7 @@ def _silverman_kde_entropy_1d_or_nd(samples_nd: np.ndarray, eval_sub: int = 256)
     # Scaled pairwise squared distance: (M, N)
     z_scaled = z / h[None, :]
     q_scaled = q / h[None, :]
-    sq_dist = (
-        np.sum(q_scaled ** 2, axis=1, keepdims=True)
-        + np.sum(z_scaled ** 2, axis=1)[None, :]
-        - 2.0 * (q_scaled @ z_scaled.T)
-    )
-    sq_dist = np.maximum(sq_dist, 0.0)
+    sq_dist = cdist(q_scaled, z_scaled, metric="sqeuclidean")
 
     log_norm = -0.5 * d * np.log(2.0 * np.pi) - float(np.sum(np.log(h))) - np.log(n)
     # log-sum-exp across N reference points
@@ -165,6 +168,7 @@ def normalized_transfer_entropy_kde(x: np.ndarray, y: np.ndarray, lag: int = 24)
     return te_norm
 
 
+@threadpool_limits.wrap(limits=1, user_api="blas")
 def discover_candidate_edges(
     returns_window_df: pd.DataFrame,
     granger_lag: int = 24,
@@ -182,6 +186,58 @@ def discover_candidate_edges(
     if m < 2:
         return []
 
+    if not np.isfinite(mat).all():
+        raise ValueError("Candidate discovery requires finite aligned returns")
+    # Prepare each target's restricted regression and TE conditional entropy once.
+    # Full-rank regressions use Frisch-Waugh-Lovell residualization. Degenerate
+    # targets use the original pairwise least-squares path for matching semantics.
+    n_total = len(mat)
+    gc_lag = min(granger_lag, max(1, (n_total - 5) // 3))
+    gc_n = n_total - gc_lag
+    gc_ready = gc_n > 2 * gc_lag + 2
+    lagged = [np.column_stack([mat[gc_lag-k:n_total-k, j]
+                              for k in range(1, gc_lag+1)]) for j in range(m)] if gc_ready else []
+    restricted = []
+    if gc_ready:
+        for j in range(m):
+            design = np.column_stack([np.ones(gc_n), lagged[j]])
+            q, r = qr(design, mode="economic")
+            if np.linalg.matrix_rank(r) != design.shape[1]:
+                restricted.append(None)
+            else:
+                target = mat[gc_lag:, j]
+                residual = target - q @ (q.T @ target)
+                restricted.append((q, residual, float(residual @ residual)))
+    te_eff_lag = min(te_lag, max(1, n_total // 4))
+    te_ready = n_total > te_eff_lag + 8
+    te_prepared = []
+    te_pair_entropy = {}
+    if te_ready:
+        for j in range(m):
+            series = mat[:, j]
+            zs = (series - np.mean(series)) / (np.std(series) + 1e-8)
+            future = zs[te_eff_lag:]
+            past = zs[:-1] if te_eff_lag == 1 else (
+                .5 * zs[te_eff_lag-1:-1] + .5 * np.mean(np.column_stack([
+                    zs[te_eff_lag-k:n_total-k] for k in range(2, te_eff_lag+1)]), axis=1))
+            # The query subsample is drawn from reference observations, so every
+            # density sum contains its own unit kernel. Products are safe from
+            # all-zero underflow and reuse the same per-coordinate bandwidths.
+            def coordinate_kernel(values):
+                std = float(np.std(values, ddof=1))
+                h = 1.06 * (std if std >= 1e-8 else 1.) * len(values) ** -.2
+                query = values[np.linspace(0, len(values)-1, 256, dtype=int)] if len(values) > 256 else values
+                kernel = np.exp(-.5 * cdist((query/h)[:, None], (values/h)[:, None], "sqeuclidean"))
+                norm = -.5 * np.log(2*np.pi) - np.log(h)
+                return kernel, norm
+            kf, nf = coordinate_kernel(future)
+            kp, npast = coordinate_kernel(past)
+            joint = kf * kp
+            log_n = np.log(len(future))
+            h_past = -npast + log_n - np.mean(np.log(kp.sum(axis=1)))
+            h_joint = -nf - npast + log_n - np.mean(np.log(joint.sum(axis=1)))
+            te_prepared.append((kp, joint, npast, nf, h_joint - h_past, log_n))
+
     raw_records: List[Tuple[str, str, float, float, float, float]] = []
     for i in range(m):
         x = mat[:, i]
@@ -193,8 +249,35 @@ def discover_candidate_edges(
             y = mat[:, j]
             if np.std(y) < 1e-12:
                 continue
-            f_stat, p_val = granger_var_ftest(x, y, lag=granger_lag)
-            te_n = normalized_transfer_entropy_kde(x, y, lag=te_lag)
+            target_fit = restricted[j] if gc_ready else None
+            if target_fit is None:
+                f_stat, p_val = granger_var_ftest(x, y, lag=granger_lag)
+            else:
+                q, yr, ssr_r = target_fit
+                xr = lagged[i] - q @ (q.T @ lagged[i])
+                beta, _, rank, _ = lstsq(xr, yr, lapack_driver="gelsy")
+                if rank < gc_lag:
+                    f_stat, p_val = granger_var_ftest(x, y, lag=granger_lag)
+                else:
+                    ru = yr - xr @ beta
+                    ssr_u = float(ru @ ru)
+                    df_den = gc_n - (2 * gc_lag + 1)
+                    f_stat = max(0., ((ssr_r - ssr_u) / gc_lag) / (ssr_u / df_den)) if ssr_u > 1e-16 else 0.
+                    p_val = float(stats.f.sf(f_stat, gc_lag, df_den))
+            if te_ready:
+                kp, joint, npast, nf, cond, log_n = te_prepared[j]
+                xp, _, nx, _, _, _ = te_prepared[i]
+                pair_key = (min(i, j), max(i, j))
+                if pair_key not in te_pair_entropy:
+                    sums = np.einsum("ij,ij->i", kp, xp)
+                    te_pair_entropy[pair_key] = -npast - nx + log_n - np.mean(np.log(sums))
+                joint_sums = np.einsum("ij,ij->i", joint, xp)
+                h_all = -nf - npast - nx + log_n - np.mean(np.log(joint_sums))
+                cond_xy = h_all - te_pair_entropy[pair_key]
+                te = max(0., cond - cond_xy)
+                te_n = float(np.clip(te / max(abs(cond), te + 1e-6, .5), 0., 1.))
+            else:
+                te_n = 0.
             # Lag-1 cross-correlation sign distinguishes positive momentum vs tail-risk contagion
             corr = float(np.corrcoef(x[:-1], y[1:])[0, 1]) if len(x) > 2 else 0.0
             if np.isnan(corr):
@@ -225,3 +308,28 @@ def discover_candidate_edges(
             edge_counter += 1
 
     return candidates
+
+
+def discover_candidate_edges_cached(returns_window_df: pd.DataFrame, cache_path: Path,
+                                    **parameters) -> List[CandidateEdge]:
+    """Reuse a daily result only when input values, clock, columns and settings match."""
+    digest = hashlib.sha256()
+    digest.update(pd.util.hash_pandas_object(returns_window_df, index=True).values.tobytes())
+    digest.update(json.dumps(list(returns_window_df.columns)).encode())
+    digest.update(json.dumps(parameters, sort_keys=True).encode())
+    digest.update(b"candidate-discovery-v2")
+    key = digest.hexdigest()
+    path = Path(cache_path)
+    if path.exists():
+        frame = pd.read_parquet(path)
+        if frame.attrs.get("input_sha256") == key:
+            return [CandidateEdge(**row) for row in frame.to_dict(orient="records")]
+        logging.getLogger(__name__).info("Recomputing mismatched candidate cache %s", path)
+    edges = discover_candidate_edges(returns_window_df, **parameters)
+    frame = pd.DataFrame([asdict(e) for e in edges], columns=list(CandidateEdge.__dataclass_fields__))
+    frame.attrs["input_sha256"] = key
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".parquet.tmp")
+    frame.to_parquet(temporary, index=False)
+    temporary.replace(path)
+    return edges
