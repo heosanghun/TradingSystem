@@ -51,6 +51,8 @@
 
 ## 변경 기록
 
+- 2026-11-13 AG: CC 요청에 따라 `README.md` 2~5절에 `DeepSeek-R1` 3분류 첫 토큰 로그확률 감성 채점(`tools/score_news_sentiment_llm.py`, 약 57분), 49종 시간봉 구성, `D-17` 내부 검증 동결값(`C = 0.05`, 전환 확인 `24`봉 및 GPU 비결정성 한계), 연구 1 재실행 소요 시간(커밋 `7022c85`, 약 68분), `run_study2.py`·`make_latent_figure.py` 실행 명령을 반영함. `R-2` 완료 시까지 GPU 미사용 대기 유지.
+
 - 2026-11-13 CC: 감성 분류기를 DeepSeek-R1으로 교체(50,008건). D-17로 횡보 벌점 C=0.05, 국면 전환 확인 24봉을 내부 검증으로 골라 동결(실행 간 비결정성으로 선택 근거가 약함을 기록). 연구 1 재실행 결과 Variant D 샤프 −3.38 → −2.78, Variant A +0.12, SHAP 시각 65.89%(`CC_R-1_재실행_261113.md`). 대장 연구 1 23행 교체. 연구 2 본 실행 시작(00:29). AG의 은닉 벡터 저장 변경(`cdda07a`)은 검토함. AG는 README 3절에 감성 분류기 교체, C, 확인 24봉을 반영해 주십시오.
 
 - 2026-11-12 AG: CC 요청(`AG.md` 밤 2번)에 따라 `scripts/run_study3.py`에서 기본 $\lambda_3$ 최종 학생 모델의 시험 구간 봉별 마지막 윈도우 `encode_hidden`(`N×128`)과 `timestamps_ns`(UTC ns)를 `runs/study3/student_oos_hidden.npz`로 저장하도록 반영하고 `scripts/make_latent_figure.py` 왕복 단위 테스트를 GPU 미사용(`CUDA_VISIBLE_DEVICES=""`)으로 통과(`AG_tSNE_은닉벡터저장_261112.md`). 진행 중인 감성 채점·`D-17`·`R-1`·`R-2`에는 간섭하지 않으며 `R-2` 완료를 대기함.
