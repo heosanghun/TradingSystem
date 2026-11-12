@@ -27,7 +27,7 @@ import pandas as pd
 
 from ts.config import DEFAULT_CONFIG_PATH, PROJECT_ROOT, SystemConfig
 from ts.data.binance_fetcher import BinanceDataFetcher
-from ts.data.macro_fetcher import MacroAssetFetcher
+from ts.data.macro_fetcher import CRYPTO_20_SYMBOLS, MacroAssetFetcher
 from ts.data.news_fetcher import PointInTimeNewsStore
 from ts.eval.latency_benchmark import benchmark_staged_pipeline
 from ts.ledger import NumberLedger, RunContext
@@ -38,6 +38,9 @@ from ts.study2.debate import GroundedDebateEngine
 from ts.study2.hypergraph import DynamicFinancialHypergraph, VerifiedSimpleEdge, build_daily_hypergraph
 from ts.study2.llm_client import LLMClient, LLMCallError
 from ts.study2.persistent_state import SQLiteJSONMap, run_checkpointed_bar
+
+
+BINANCE_FX_PROXY_SYMBOLS = ("EURUSDT", "GBPUSDT")
 
 
 def main() -> None:
@@ -57,6 +60,8 @@ def main() -> None:
                         help="Distinct out-of-sample bars used for the teacher latency measurement.")
     parser.add_argument("--ollama-num-ctx", type=int, default=4096)
     parser.add_argument("--llm-timeout-sec", type=int, default=120)
+    parser.add_argument("--llm-request-attempts", type=int, default=8,
+                        help="Samples drawn for one call before it counts as failed (cut-off or malformed JSON).")
     parser.add_argument("--max-bars", type=int, default=0,
                         help="Diagnostic runs only: stop after this many timeline bars.")
     parser.add_argument("--diagnostic-run", action="store_true")
@@ -88,7 +93,12 @@ def main() -> None:
 
     macro_fetcher = MacroAssetFetcher(cache_dir=cache_dir)
     try:
-        returns_60_df = macro_fetcher.build_aligned_60_asset_returns(pd.DatetimeIndex(df_all.index))
+        # The thesis universe includes exchange rates. Spot FX has no free hourly archive, so
+        # the euro and the pound are taken from their Binance stablecoin pairs (EUR/USDT,
+        # GBP/USDT), which trade around the clock and cover the whole period.
+        returns_60_df = macro_fetcher.build_aligned_60_asset_returns(
+            pd.DatetimeIndex(df_all.index),
+            crypto_symbols=tuple(CRYPTO_20_SYMBOLS) + BINANCE_FX_PROXY_SYMBOLS)
     except RuntimeError:
         (out_dir / "metrics.json").write_text(json.dumps({"status": "data_incomplete",
             "universe": macro_fetcher.last_universe_report, "ledger_written": False}, indent=2), encoding="utf-8")
@@ -141,6 +151,7 @@ def main() -> None:
         max_tokens=cfg.study2.llm_max_tokens,
         cache_db_path=cache_dir / "llm_cache.sqlite",
         timeout_sec=args.llm_timeout_sec,
+        max_request_attempts=args.llm_request_attempts,
         ollama_num_ctx=args.ollama_num_ctx,
     )
     verifier = CitationVerifier(te_tolerance=cfg.study2.te_citation_tolerance)
@@ -158,7 +169,7 @@ def main() -> None:
     identity.update(cfg.config_sha256.encode())
     identity.update(json.dumps([args.llm_backend, args.llm_endpoint, args.llm_model,
                                 args.debate_stride, args.counterfactual_every, args.edge_top_k,
-                                args.ollama_num_ctx, args.max_bars,
+                                args.ollama_num_ctx, args.max_bars, args.llm_request_attempts,
                                 args.diagnostic_run], sort_keys=True).encode())
     identity.update(s1_file.read_bytes())
     identity.update(pd.util.hash_pandas_object(returns_60_df, index=True).values.tobytes())
