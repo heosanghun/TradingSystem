@@ -16,6 +16,7 @@ import csv
 import json
 import os
 import subprocess
+import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -115,14 +116,28 @@ class GitState:
         return f"{self.commit}-dirty" if self.dirty else self.commit
 
 
-_RESULT_AFFECTING_PREFIXES = ("src/", "scripts/", "configs/")
-_RESULT_AFFECTING_FILES = ("pyproject.toml",)
-
-
-def _affects_results(repo_relative_path: str) -> bool:
-    """Code and configuration can change a measured number; documents, tests and the ledger cannot."""
-    path = repo_relative_path.replace("\\", "/")
-    return path.startswith(_RESULT_AFFECTING_PREFIXES) or path in _RESULT_AFFECTING_FILES
+def _files_this_run_depends_on(cwd: Path) -> set:
+    """
+    Repository-relative paths of the code this process has actually loaded: every imported
+    module that lives inside the project, plus the entry script. A measured number can only
+    depend on these files and on the configuration.
+    """
+    root = Path(cwd).resolve()
+    paths = set()
+    candidates = [getattr(mod, "__file__", None) for mod in list(sys.modules.values())]
+    candidates.append(sys.argv[0] if sys.argv else None)
+    for raw in candidates:
+        if not raw:
+            continue
+        try:
+            rel = Path(raw).resolve().relative_to(root)
+        except (ValueError, OSError):
+            continue
+        rel_posix = rel.as_posix()
+        if rel_posix.startswith((".venv/", "tests/")):
+            continue
+        paths.add(rel_posix)
+    return paths
 
 
 def read_git_state(cwd: Path = PROJECT_ROOT) -> GitState:
@@ -130,8 +145,10 @@ def read_git_state(cwd: Path = PROJECT_ROOT) -> GitState:
     State of the repository rooted exactly at `cwd`.
 
     A parent repository that merely contains the project folder does not count: its commit
-    would not identify this code. The tree counts as dirty only when tracked files under
-    `src/`, `scripts/`, `configs/` or `pyproject.toml` have uncommitted changes.
+    would not identify this code. The run counts as dirty when a file it depends on differs
+    from the commit: a loaded project module or the entry script (modified or untracked),
+    anything under `configs/`, or `pyproject.toml`. Edits to files this process never loaded
+    (another stage's module, documents, tests, the ledger) do not make it dirty.
     """
 
     def _git(*args: str) -> Optional[str]:
@@ -154,9 +171,13 @@ def read_git_state(cwd: Path = PROJECT_ROOT) -> GitState:
         return GitState(commit="", in_project_repo=False, dirty=True)
 
     commit = (_git("rev-parse", "--short", "HEAD") or "").strip()
-    status = _git("status", "--porcelain", "--untracked-files=no") or ""
-    changed = [line[3:].strip().strip('"') for line in status.splitlines() if line.strip()]
-    dirty = any(_affects_results(path) for path in changed)
+    status = _git("status", "--porcelain", "--untracked-files=all") or ""
+    changed = {line[3:].strip().strip('"').replace("\\", "/") for line in status.splitlines() if line.strip()}
+    loaded = _files_this_run_depends_on(cwd)
+    dirty = any(
+        path in loaded or path.startswith("configs/") or path == "pyproject.toml"
+        for path in changed
+    )
     return GitState(commit=commit, in_project_repo=bool(commit), dirty=dirty)
 
 
