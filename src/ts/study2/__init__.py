@@ -1,42 +1,31 @@
-"""Study 2 (Ch. IV): Hypergraph-Grounded Multi-Agent LLM Debate."""
+"""Teacher interfaces with lazy imports."""
+from importlib import import_module
 
-from ts.study2.causality import (
-    CandidateEdge,
-    discover_candidate_edges,
-    granger_var_ftest,
-    normalized_transfer_entropy_kde,
-)
-from ts.study2.citation_verifier import CitationCheckResult, CitationVerificationStats, CitationVerifier
-from ts.study2.debate import DebateOutcome, GroundedDebateEngine
-from ts.study2.hypergraph import (
-    DynamicFinancialHypergraph,
-    HyperEdgeRecord,
-    VerifiedSimpleEdge,
-    build_daily_hypergraph,
-)
-from ts.study2.llm_client import LLMClient
-from ts.study2.prompts import (
-    ALPHA_ANALYST_SYSTEM_PROMPT,
-    EDGE_VERIFIER_SYSTEM_PROMPT,
-    RISK_MANAGER_SYSTEM_PROMPT,
-)
+_EXPORTS = {
+    'CandidateEdge': 'ts.study2.causality',
+    'discover_candidate_edges': 'ts.study2.causality',
+    'granger_var_ftest': 'ts.study2.causality',
+    'normalized_transfer_entropy_kde': 'ts.study2.causality',
+    'CitationCheckResult': 'ts.study2.citation_verifier',
+    'CitationVerificationStats': 'ts.study2.citation_verifier',
+    'CitationVerifier': 'ts.study2.citation_verifier',
+    'DebateOutcome': 'ts.study2.debate',
+    'GroundedDebateEngine': 'ts.study2.debate',
+    'DynamicFinancialHypergraph': 'ts.study2.hypergraph',
+    'HyperEdgeRecord': 'ts.study2.hypergraph',
+    'VerifiedSimpleEdge': 'ts.study2.hypergraph',
+    'build_daily_hypergraph': 'ts.study2.hypergraph',
+    'LLMClient': 'ts.study2.llm_client',
+    'ALPHA_ANALYST_SYSTEM_PROMPT': 'ts.study2.prompts',
+    'EDGE_VERIFIER_SYSTEM_PROMPT': 'ts.study2.prompts',
+    'RISK_MANAGER_SYSTEM_PROMPT': 'ts.study2.prompts',
+}
+__all__ = list(_EXPORTS)
 
-__all__ = [
-    "CandidateEdge",
-    "discover_candidate_edges",
-    "granger_var_ftest",
-    "normalized_transfer_entropy_kde",
-    "CitationCheckResult",
-    "CitationVerificationStats",
-    "CitationVerifier",
-    "DebateOutcome",
-    "GroundedDebateEngine",
-    "DynamicFinancialHypergraph",
-    "HyperEdgeRecord",
-    "VerifiedSimpleEdge",
-    "build_daily_hypergraph",
-    "LLMClient",
-    "ALPHA_ANALYST_SYSTEM_PROMPT",
-    "EDGE_VERIFIER_SYSTEM_PROMPT",
-    "RISK_MANAGER_SYSTEM_PROMPT",
-]
+
+def __getattr__(name):
+    if name not in _EXPORTS:
+        raise AttributeError(name)
+    value = getattr(import_module(_EXPORTS[name]), name)
+    globals()[name] = value
+    return value

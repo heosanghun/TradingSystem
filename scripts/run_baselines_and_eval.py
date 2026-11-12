@@ -1,7 +1,4 @@
-"""
-WP1 & WP5 — Controlled Baselines (`Single PPO`, `Static Ensemble`, `MAML`),
-Crisis Losses (Table 6.8), and Ledoit-Wolf + Circular Block Bootstrap Significance Tests.
-"""
+"""Evaluate PPO and parameter-interpolation baselines; keep unapproved budgets provisional."""
 
 from __future__ import annotations
 
@@ -27,7 +24,7 @@ from ts.eval.cost_model import compute_phase1_cost_rates, compute_phase2_bar_bas
 from ts.eval.metrics import compute_crisis_window_loss
 from ts.eval.significance import ledoit_wolf_and_block_bootstrap_test
 from ts.eval.walk_forward import generate_phase1_kfold_splits, generate_phase2_walk_forward_folds
-from ts.ledger import NumberLedger
+from ts.ledger import NumberLedger, RunContext
 from ts.study1.encoders import TechnicalIndicatorCalculator
 from ts.study1.regime_labeling import SMARegimeLabeler, TrendScanningLabeler
 
@@ -191,7 +188,11 @@ def main() -> None:
     }
     (out_dir / "metrics.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    ledger = NumberLedger()
+    ledger = NumberLedger(run_context=RunContext(stage="baselines", flags={
+        "quick_verify": False, "reduced_training_budget": True}))
+    # T-102 has not yet established a converged full-training budget. Until that
+    # budget is approved, these comparisons remain provisional regardless of the
+    # CLI rollout count. Do not infer convergence from an arbitrary number.
     rec_kw = dict(script_path=script_rel, config_sha256=cfg.config_sha256, run_log_path=log_path)
 
     for ph_num, res_map in [(1, res_p1), (2, res_p2)]:

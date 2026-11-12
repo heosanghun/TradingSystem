@@ -1,9 +1,9 @@
 """
 Controlled Baseline Models (Chapter VI Sec 4, Table 6.5, Eqs. VI.9–VI.11).
 
-All baselines strictly use the exact same 5 discrete target weights
-`[-1.0, -0.5, 0.0, +0.5, +1.0]`, the exact same causal test windows, and the
-exact same Phase 1 / Phase 2 transaction cost model:
+All baselines strictly use the same 5 discrete target weights
+`[-1.0, -0.5, 0.0, +0.5, +1.0]`, the same causal test windows, and the
+same Phase 1 / Phase 2 transaction cost model:
 1. `BuyAndHoldBaseline` — Constant `w_t = +1.0`
 2. `SinglePPOBaseline` — Schulman et al. [18] single-seed PPO on price/tech state
 3. `StaticEnsembleBaseline` — Liu & Kang [49] fixed `1/N` equal-weighted PPO ensemble (Eq. VI.9)
@@ -114,11 +114,12 @@ class StaticEnsembleBaseline:
 
 
 class MAMLMetaPPOBaseline:
-    """
-    Meta-Learning DRL Baseline (Finn et al. [61], Noor & Fatima [50], Eqs. VI.10–VI.11):
-    Performs inner-loop PPO adaptation `θ'_i = θ - α_in ∇_θ L_{R_i}(θ)` on each regime task
-    `R_i ∈ {Bull, Bear, Sideways}` and outer-loop meta-update `θ <- θ + β_out Σ_i (θ'_i - θ)`
-    (First-Order MAML / Reptile equivalence), plus causal trailing-window test adaptation.
+    """Reptile-style parameter interpolation with inner PPO adaptation.
+
+    The historical class name is retained for API compatibility. This is not
+    MAML: the outer update interpolates task-adapted parameters instead of
+    differentiating a held-out task loss. The manuscript/model label requires
+    an explicit decision before this can be reported as a MAML comparison.
     """
 
     def __init__(
