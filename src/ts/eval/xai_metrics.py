@@ -18,12 +18,13 @@ reproducible explainability metrics (including all 4 `"측정 후 기입"` cells
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Dict
+from typing import TYPE_CHECKING, Dict
 
 import numpy as np
 
-from ts.eval.shap_analysis import ModalitySHAPResult
-from ts.study2.citation_verifier import CitationVerificationStats
+if TYPE_CHECKING:  # annotations only; importing these would load Study 1 and Study 2 code
+    from ts.eval.shap_analysis import ModalitySHAPResult
+    from ts.study2.citation_verifier import CitationVerificationStats
 
 
 @dataclass
