@@ -23,3 +23,6 @@ __pycache__/
 
 # Local scratch
 /tmp/
+
+# Non-final ledger records
+/ledger/provisional.csv
