@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import inspect
+
 import numpy as np
 import pandas as pd
 import torch
 
-from ts.study1.chart_renderer import CandlestickChartRenderer
+from ts.study1.chart_renderer import CandlestickChartRenderer, normalize_chart_batch_to_tensor
 from ts.study1.encoders import CrossModalStateFusion, MultimodalStateEncoder, TechnicalIndicatorCalculator
 from ts.study1.ensemble import DynamicRegimeEnsemble
 from ts.study1.regime_classifier import XGBoostRegimeClassifier
@@ -115,3 +117,38 @@ def test_study1_encoder_xgb_and_dynamic_ensemble_rollout() -> None:
     assert probs_t10.shape == (10, 5)
     assert acts_t10.shape == (10,)
     assert np.all(np.isin(w_t10, [-1.0, -0.5, 0.0, 0.5, 1.0]))
+
+
+def test_uint8_lazy_chart_normalization_matches_float32_and_default_pretrained_signature() -> None:
+    sig = inspect.signature(MultimodalStateEncoder.__init__)
+    assert sig.parameters["pretrained_resnet"].default is True
+
+    df = _make_synthetic_ohlcv(75)
+    renderer = CandlestickChartRenderer(window_bars=30, image_size=(224, 224))
+    charts_f32 = renderer.render_series_batch(df)
+    charts_u8 = renderer.render_series_uint8(df)
+
+    assert charts_u8.dtype == np.uint8
+    assert charts_u8.shape == (75, 224, 224, 3)
+    assert charts_u8.nbytes * 4 == charts_f32.nbytes
+
+    norm_from_u8 = normalize_chart_batch_to_tensor(charts_u8[:12], torch.device("cpu")).numpy()
+    assert np.allclose(norm_from_u8, charts_f32[:12], atol=1e-6)
+
+    tech = TechnicalIndicatorCalculator(zscore_window=20).compute(df).to_numpy(dtype=np.float32)
+    senti = np.zeros((75, 8), dtype=np.float32)
+    senti[:, 1] = 0.25
+    sub_idx = np.arange(15, 65)
+
+    torch.manual_seed(777)
+    enc = MultimodalStateEncoder(pretrained_resnet=False)
+    enc.eval()
+
+    st_f32, mod_f32 = enc.encode_dataset(
+        charts_f32[sub_idx], tech[sub_idx], senti[sub_idx], batch_size=16, device=torch.device("cpu")
+    )
+    st_u8, mod_u8 = enc.encode_dataset(
+        charts_u8, tech, senti, batch_size=16, device=torch.device("cpu"), indices=sub_idx
+    )
+    assert np.allclose(st_u8, st_f32, atol=1e-5)
+    assert np.allclose(mod_u8, mod_f32, atol=1e-5)
