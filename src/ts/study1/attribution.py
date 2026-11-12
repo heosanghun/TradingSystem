@@ -56,6 +56,7 @@ def compute_modality_group_shapley(
     active_regimes: np.ndarray,
     chosen_actions: np.ndarray,
     expert_weights: Optional[np.ndarray] = None,
+    prev_weights: Optional[np.ndarray] = None,
     num_experts_subset: Optional[int] = None,
     d_visual: int = 128,
     d_tech: int = 64,
@@ -91,6 +92,16 @@ def compute_modality_group_shapley(
     else:
         exp_w_all = np.full((n_total, m_exp), 1.0 / max(m_exp, 1), dtype=np.float32)
 
+    if prev_weights is None and ensemble.last_rollout_prev_weights_ is not None:
+        if len(ensemble.last_rollout_prev_weights_) == n_total:
+            prev_weights = ensemble.last_rollout_prev_weights_
+    if prev_weights is not None:
+        if len(prev_weights) != n_total:
+            raise ValueError(f"Expected prev_weights length {n_total}, got {len(prev_weights)}.")
+        prev_w_all = np.asarray(prev_weights, dtype=np.float32)
+    else:
+        prev_w_all = np.zeros(n_total, dtype=np.float32)
+
     rng = np.random.default_rng(seed)
     bg_cnt = min(n_background, n_total)
     exp_cnt = min(n_explain, n_total)
@@ -102,6 +113,7 @@ def compute_modality_group_shapley(
     fg_regimes = np.asarray(active_regimes[exp_idx], dtype=np.int64)
     fg_actions = torch.as_tensor(chosen_actions[exp_idx], dtype=torch.long, device=dev)
     fg_exp_w = torch.as_tensor(exp_w_all[exp_idx], dtype=torch.float32, device=dev)
+    fg_prev_w = torch.as_tensor(prev_w_all[exp_idx], dtype=torch.float32, device=dev)
 
     s0 = slice(0, d_visual)
     s1 = slice(d_visual, d_visual + d_tech)
@@ -158,6 +170,7 @@ def compute_modality_group_shapley(
             chunk_reg = fg_regimes[c_start:c_end]
             chunk_act = fg_actions[c_start:c_end]
             chunk_w = fg_exp_w[c_start:c_end]
+            chunk_pw = fg_prev_w[c_start:c_end]
 
             chunk_target = torch.zeros((c_len, bg_cnt), dtype=torch.float32, device=dev)
             for r_id in (REGIME_BULL, REGIME_BEAR, REGIME_SIDEWAYS):
@@ -166,6 +179,9 @@ def compute_modality_group_shapley(
                     continue
                 r_loc_t = torch.as_tensor(r_loc, dtype=torch.long, device=dev)
                 sub_states = fused[r_loc_t].reshape(len(r_loc) * bg_cnt, -1)
+                if ensemble.include_prev_weight:
+                    pw_rep = chunk_pw[r_loc_t].view(len(r_loc), 1, 1).expand(len(r_loc), bg_cnt, 1)
+                    sub_states = torch.cat([sub_states, pw_rep.reshape(len(r_loc) * bg_cnt, 1)], dim=-1)
                 act_idx = chunk_act[r_loc_t].unsqueeze(1).expand(len(r_loc), bg_cnt).reshape(-1, 1)
 
                 ens_logit = torch.zeros(len(r_loc), bg_cnt, dtype=torch.float32, device=dev)

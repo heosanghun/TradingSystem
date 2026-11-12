@@ -43,7 +43,9 @@
     "ensemble_temperature": 10.0,
     "experts_per_regime": 5,
     "max_experts_per_regime_for_sensitivity": 7,
-    "hidden_dims": [128, 64]
+    "hidden_dims": [128, 64],
+    "include_prev_weight": true,
+    "respect_segment_boundaries": true
   },
   "study1_encoders": {
     "candlestick_window_bars": 60,
@@ -66,7 +68,11 @@
     "trend_scan_min_horizon": 24,
     "trend_scan_max_horizon": 120,
     "trend_scan_t_threshold": 2.0,
+    "trend_scan_use_quantile": true,
+    "trend_scan_unit_root_scale": false,
     "regime_switch_threshold": 0.60,
+    "regime_confirm_bars": 2,
+    "xgb_balance_classes": false,
     "xgb_n_estimators": 300,
     "xgb_max_depth": 6,
     "xgb_learning_rate": 0.05

@@ -1,0 +1,426 @@
+{
+  "script_path": "scripts/calibrate_study1_d15_fixes.py",
+  "preregistered_in_commit": "84ec746",
+  "executed_on_git_state": "84ec746-dirty",
+  "selection_criterion_pre_registered": true,
+  "test_fold_accessed": false,
+  "sub_train_window_utc": [
+    "2020-10-01 00:00:00+00:00",
+    "2021-07-31 23:00:00+00:00"
+  ],
+  "val_window_utc": [
+    "2021-08-01 00:00:00+00:00",
+    "2021-09-30 23:00:00+00:00"
+  ],
+  "sub_train_bars": 7283,
+  "val_bars": 1458,
+  "ppo_rollouts_per_fold": 64,
+  "selected_candidate_id": "L1_M1_G2",
+  "selected_candidate_summary": {
+    "candidate_id": "L1_M1_G2",
+    "in_selection_pool": true,
+    "label_mode": "L1_ols_q60",
+    "tau_trend": 16.7722,
+    "markov_prev_weight": true,
+    "gate_mode": "G2",
+    "balance_classes": false,
+    "confirm_bars": 2,
+    "sub_train_label_counts": [
+      2042,
+      823,
+      4298
+    ],
+    "sub_train_label_shares": [
+      0.2851,
+      0.1149,
+      0.6
+    ],
+    "sub_train_pred_regime_counts": [
+      2068,
+      824,
+      4391
+    ],
+    "val_pred_regime_counts": [
+      255,
+      34,
+      1169
+    ],
+    "val_regime_switches_per_bar": 0.0439,
+    "val_action_counts": [
+      7,
+      13,
+      571,
+      718,
+      149
+    ],
+    "val_mean_turnover": 0.0837,
+    "val_pre_cost_sharpe": 1.006,
+    "val_sharpe": -3.524,
+    "val_sortino": -4.984,
+    "val_cum_return_pct": -17.69,
+    "val_mdd_pct": -21.99,
+    "elapsed_sec": 83.27
+  },
+  "candidate_results": [
+    {
+      "candidate_id": "B0_legacy",
+      "in_selection_pool": false,
+      "label_mode": "B0_t2",
+      "tau_trend": 2.0,
+      "markov_prev_weight": false,
+      "gate_mode": "G0",
+      "balance_classes": true,
+      "confirm_bars": 1,
+      "sub_train_label_counts": [
+        4291,
+        2872,
+        0
+      ],
+      "sub_train_label_shares": [
+        0.5991,
+        0.4009,
+        0.0
+      ],
+      "sub_train_pred_regime_counts": [
+        4389,
+        2893,
+        1
+      ],
+      "val_pred_regime_counts": [
+        672,
+        786,
+        0
+      ],
+      "val_regime_switches_per_bar": 0.0954,
+      "val_action_counts": [
+        28,
+        47,
+        143,
+        454,
+        786
+      ],
+      "val_mean_turnover": 0.1571,
+      "val_pre_cost_sharpe": 1.222,
+      "val_sharpe": -4.537,
+      "val_sortino": -6.071,
+      "val_cum_return_pct": -33.67,
+      "val_mdd_pct": -37.9,
+      "elapsed_sec": 145.01
+    },
+    {
+      "candidate_id": "L2_M0_G1_ablation",
+      "in_selection_pool": false,
+      "label_mode": "L2_sqrtL_q60",
+      "tau_trend": 1.9914,
+      "markov_prev_weight": false,
+      "gate_mode": "G1",
+      "balance_classes": false,
+      "confirm_bars": 1,
+      "sub_train_label_counts": [
+        2087,
+        778,
+        4298
+      ],
+      "sub_train_label_shares": [
+        0.2914,
+        0.1086,
+        0.6
+      ],
+      "sub_train_pred_regime_counts": [
+        2134,
+        784,
+        4365
+      ],
+      "val_pred_regime_counts": [
+        359,
+        54,
+        1045
+      ],
+      "val_regime_switches_per_bar": 0.1201,
+      "val_action_counts": [
+        0,
+        94,
+        1071,
+        239,
+        54
+      ],
+      "val_mean_turnover": 0.1368,
+      "val_pre_cost_sharpe": -0.398,
+      "val_sharpe": -12.534,
+      "val_sortino": -15.793,
+      "val_cum_return_pct": -32.22,
+      "val_mdd_pct": -32.22,
+      "elapsed_sec": 79.38
+    },
+    {
+      "candidate_id": "L1_M1_G0",
+      "in_selection_pool": true,
+      "label_mode": "L1_ols_q60",
+      "tau_trend": 16.7722,
+      "markov_prev_weight": true,
+      "gate_mode": "G0",
+      "balance_classes": true,
+      "confirm_bars": 1,
+      "sub_train_label_counts": [
+        2042,
+        823,
+        4298
+      ],
+      "sub_train_label_shares": [
+        0.2851,
+        0.1149,
+        0.6
+      ],
+      "sub_train_pred_regime_counts": [
+        2069,
+        823,
+        4391
+      ],
+      "val_pred_regime_counts": [
+        273,
+        51,
+        1134
+      ],
+      "val_regime_switches_per_bar": 0.1002,
+      "val_action_counts": [
+        68,
+        144,
+        732,
+        419,
+        95
+      ],
+      "val_mean_turnover": 0.142,
+      "val_pre_cost_sharpe": -0.462,
+      "val_sharpe": -8.302,
+      "val_sortino": -11.156,
+      "val_cum_return_pct": -36.25,
+      "val_mdd_pct": -36.71,
+      "elapsed_sec": 83.0
+    },
+    {
+      "candidate_id": "L1_M1_G1",
+      "in_selection_pool": true,
+      "label_mode": "L1_ols_q60",
+      "tau_trend": 16.7722,
+      "markov_prev_weight": true,
+      "gate_mode": "G1",
+      "balance_classes": false,
+      "confirm_bars": 1,
+      "sub_train_label_counts": [
+        2042,
+        823,
+        4298
+      ],
+      "sub_train_label_shares": [
+        0.2851,
+        0.1149,
+        0.6
+      ],
+      "sub_train_pred_regime_counts": [
+        2067,
+        823,
+        4393
+      ],
+      "val_pred_regime_counts": [
+        259,
+        47,
+        1152
+      ],
+      "val_regime_switches_per_bar": 0.094,
+      "val_action_counts": [
+        92,
+        151,
+        340,
+        820,
+        55
+      ],
+      "val_mean_turnover": 0.1505,
+      "val_pre_cost_sharpe": -0.851,
+      "val_sharpe": -8.297,
+      "val_sortino": -10.875,
+      "val_cum_return_pct": -40.0,
+      "val_mdd_pct": -40.5,
+      "elapsed_sec": 83.0
+    },
+    {
+      "candidate_id": "L1_M1_G2",
+      "in_selection_pool": true,
+      "label_mode": "L1_ols_q60",
+      "tau_trend": 16.7722,
+      "markov_prev_weight": true,
+      "gate_mode": "G2",
+      "balance_classes": false,
+      "confirm_bars": 2,
+      "sub_train_label_counts": [
+        2042,
+        823,
+        4298
+      ],
+      "sub_train_label_shares": [
+        0.2851,
+        0.1149,
+        0.6
+      ],
+      "sub_train_pred_regime_counts": [
+        2068,
+        824,
+        4391
+      ],
+      "val_pred_regime_counts": [
+        255,
+        34,
+        1169
+      ],
+      "val_regime_switches_per_bar": 0.0439,
+      "val_action_counts": [
+        7,
+        13,
+        571,
+        718,
+        149
+      ],
+      "val_mean_turnover": 0.0837,
+      "val_pre_cost_sharpe": 1.006,
+      "val_sharpe": -3.524,
+      "val_sortino": -4.984,
+      "val_cum_return_pct": -17.69,
+      "val_mdd_pct": -21.99,
+      "elapsed_sec": 83.27
+    },
+    {
+      "candidate_id": "L2_M1_G0",
+      "in_selection_pool": true,
+      "label_mode": "L2_sqrtL_q60",
+      "tau_trend": 1.9914,
+      "markov_prev_weight": true,
+      "gate_mode": "G0",
+      "balance_classes": true,
+      "confirm_bars": 1,
+      "sub_train_label_counts": [
+        2087,
+        778,
+        4298
+      ],
+      "sub_train_label_shares": [
+        0.2914,
+        0.1086,
+        0.6
+      ],
+      "sub_train_pred_regime_counts": [
+        2135,
+        786,
+        4362
+      ],
+      "val_pred_regime_counts": [
+        376,
+        76,
+        1006
+      ],
+      "val_regime_switches_per_bar": 0.1297,
+      "val_action_counts": [
+        103,
+        158,
+        671,
+        453,
+        73
+      ],
+      "val_mean_turnover": 0.1464,
+      "val_pre_cost_sharpe": -4.793,
+      "val_sharpe": -12.454,
+      "val_sortino": -15.05,
+      "val_cum_return_pct": -49.74,
+      "val_mdd_pct": -50.45,
+      "elapsed_sec": 82.55
+    },
+    {
+      "candidate_id": "L2_M1_G1",
+      "in_selection_pool": true,
+      "label_mode": "L2_sqrtL_q60",
+      "tau_trend": 1.9914,
+      "markov_prev_weight": true,
+      "gate_mode": "G1",
+      "balance_classes": false,
+      "confirm_bars": 1,
+      "sub_train_label_counts": [
+        2087,
+        778,
+        4298
+      ],
+      "sub_train_label_shares": [
+        0.2914,
+        0.1086,
+        0.6
+      ],
+      "sub_train_pred_regime_counts": [
+        2134,
+        784,
+        4365
+      ],
+      "val_pred_regime_counts": [
+        359,
+        54,
+        1045
+      ],
+      "val_regime_switches_per_bar": 0.1201,
+      "val_action_counts": [
+        183,
+        48,
+        420,
+        645,
+        162
+      ],
+      "val_mean_turnover": 0.1461,
+      "val_pre_cost_sharpe": -1.232,
+      "val_sharpe": -7.863,
+      "val_sortino": -10.378,
+      "val_cum_return_pct": -41.38,
+      "val_mdd_pct": -43.41,
+      "elapsed_sec": 83.47
+    },
+    {
+      "candidate_id": "L2_M1_G2",
+      "in_selection_pool": true,
+      "label_mode": "L2_sqrtL_q60",
+      "tau_trend": 1.9914,
+      "markov_prev_weight": true,
+      "gate_mode": "G2",
+      "balance_classes": false,
+      "confirm_bars": 2,
+      "sub_train_label_counts": [
+        2087,
+        778,
+        4298
+      ],
+      "sub_train_label_shares": [
+        0.2914,
+        0.1086,
+        0.6
+      ],
+      "sub_train_pred_regime_counts": [
+        2131,
+        778,
+        4374
+      ],
+      "val_pred_regime_counts": [
+        353,
+        45,
+        1060
+      ],
+      "val_regime_switches_per_bar": 0.0659,
+      "val_action_counts": [
+        76,
+        61,
+        769,
+        293,
+        259
+      ],
+      "val_mean_turnover": 0.1495,
+      "val_pre_cost_sharpe": -3.095,
+      "val_sharpe": -9.57,
+      "val_sortino": -11.898,
+      "val_cum_return_pct": -46.78,
+      "val_mdd_pct": -46.83,
+      "elapsed_sec": 83.16
+    }
+  ]
+}

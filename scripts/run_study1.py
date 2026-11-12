@@ -34,6 +34,7 @@ from ts.study1.attribution import ModalityAttributionResult, compute_modality_gr
 from ts.study1.chart_renderer import CandlestickChartRenderer
 from ts.study1.encoders import ModalityMode, MultimodalStateEncoder, TechnicalIndicatorCalculator
 from ts.study1.ensemble import DynamicRegimeEnsemble
+from ts.study1.ppo_expert import NEUTRAL_ACTION_INDEX
 from ts.study1.regime_classifier import XGBoostRegimeClassifier
 from ts.study1.regime_labeling import REGIME_SIDEWAYS, TrendScanningLabeler
 
@@ -51,7 +52,9 @@ class _FoldBranchOutput:
     chosen_actions_te: np.ndarray
     weights_te: np.ndarray
     expert_weights_te: np.ndarray
+    prev_weights_te: np.ndarray
     next_initial_regime: int
+    next_initial_action: int
 
 
 def _run_study1_fold_branch(
@@ -71,6 +74,7 @@ def _run_study1_fold_branch(
     pool_experts: int,
     eval_experts_subset: int,
     prev_initial_regime: int,
+    prev_initial_action: int,
     base_seed_offset: int,
     log_dir: Optional[Path],
     tag_prefix: str,
@@ -109,6 +113,8 @@ def _run_study1_fold_branch(
         max_depth=cfg.study1_encoders.xgb_max_depth,
         learning_rate=cfg.study1_encoders.xgb_learning_rate,
         switch_threshold=cfg.study1_encoders.regime_switch_threshold,
+        balance_classes=cfg.study1_encoders.xgb_balance_classes,
+        confirm_bars=cfg.study1_encoders.regime_confirm_bars,
         random_state=42 + fold.fold_id + base_seed_offset,
     )
     clf.fit(tr_states, tr_labels)
@@ -139,6 +145,8 @@ def _run_study1_fold_branch(
             "per_beta_end": cfg.study1_ppo.per_beta_end,
             "minibatch_size": cfg.study1_ppo.minibatch_size,
             "ppo_epochs": cfg.study1_ppo.ppo_epochs,
+            "include_prev_weight": cfg.study1_ppo.include_prev_weight,
+            "respect_segment_boundaries": cfg.study1_ppo.respect_segment_boundaries,
             "device": device,
         },
     )
@@ -163,9 +171,13 @@ def _run_study1_fold_branch(
         warmup_states=tr_states,
         warmup_returns=next_ret_all[tr_idx],
         warmup_costs=base_costs_all[tr_idx],
+        initial_action=prev_initial_action,
     )
     assert ens.last_rollout_expert_weights_ is not None
+    assert ens.last_rollout_prev_weights_ is not None
     exp_w_te = ens.last_rollout_expert_weights_.copy()
+    prev_w_te = ens.last_rollout_prev_weights_.copy()
+    next_act = int(ens.last_final_action_)
 
     return _FoldBranchOutput(
         encoder=encoder,
@@ -179,7 +191,9 @@ def _run_study1_fold_branch(
         chosen_actions_te=chosen_acts,
         weights_te=w_out,
         expert_weights_te=exp_w_te,
+        prev_weights_te=prev_w_te,
         next_initial_regime=next_init,
+        next_initial_action=next_act,
     )
 
 
@@ -299,8 +313,15 @@ def main() -> None:
     oos_k_weights: Dict[int, List[np.ndarray]] = {kk: [] for kk in expert_keys}
 
     shap_period2_results: List[ModalityAttributionResult] = []
+    train_label_counts_by_fold: Dict[str, List[int]] = {}
     prev_last_regime_d = REGIME_SIDEWAYS
     prev_last_regime_a = REGIME_SIDEWAYS
+    prev_last_action_d = NEUTRAL_ACTION_INDEX
+    prev_last_action_a = NEUTRAL_ACTION_INDEX
+    prev_last_action_b = NEUTRAL_ACTION_INDEX
+    prev_last_action_c = NEUTRAL_ACTION_INDEX
+    prev_last_action_temp: Dict[str, int] = {tk: NEUTRAL_ACTION_INDEX for tk in temp_keys}
+    prev_last_action_k: Dict[int, int] = {kk: NEUTRAL_ACTION_INDEX for kk in expert_keys}
 
     for fold in folds:
         print(
@@ -311,12 +332,17 @@ def main() -> None:
         tr_idx = fold.train_indices
         te_idx = fold.test_indices
 
+        use_q = bool(cfg.study1_encoders.trend_scan_use_quantile)
         labeler = TrendScanningLabeler(
             horizon_min=cfg.study1_encoders.trend_scan_min_horizon,
             horizon_max=cfg.study1_encoders.trend_scan_max_horizon,
-            t_threshold=cfg.study1_encoders.trend_scan_t_threshold,
+            t_threshold=None if use_q else cfg.study1_encoders.trend_scan_t_threshold,
+            trend_quantile=cfg.study1_encoders.trend_quantile if use_q else None,
+            unit_root_scale=cfg.study1_encoders.trend_scan_unit_root_scale,
         )
         tr_labels = labeler.fit_label_train_fold(df_all["close"].iloc[tr_idx])
+        valid_tr_lbl = tr_labels[tr_labels >= 0]
+        train_label_counts_by_fold[str(fold.fold_id)] = np.bincount(valid_tr_lbl, minlength=3).tolist()
 
         # Primary Multimodal Branch (Variant D, K_max = 7 trained once for sensitivity sweeps)
         branch_d = _run_study1_fold_branch(
@@ -335,12 +361,14 @@ def main() -> None:
             pool_experts=k_max,
             eval_experts_subset=cfg.study1_ppo.experts_per_regime,
             prev_initial_regime=prev_last_regime_d,
+            prev_initial_action=prev_last_action_d,
             base_seed_offset=0,
             log_dir=training_logs_dir,
             tag_prefix="varD",
             device=device,
         )
         prev_last_regime_d = branch_d.next_initial_regime
+        prev_last_action_d = branch_d.next_initial_action
 
         if fold.fold_id == 1:
             tr_probs_d, _, _ = branch_d.ensemble.rollout_causal_policy(
@@ -350,6 +378,7 @@ def main() -> None:
                 one_way_cost_rates=base_costs_all[tr_idx],
                 temperature=cfg.study1_ppo.ensemble_temperature,
                 num_experts_subset=cfg.study1_ppo.experts_per_regime,
+                initial_action=NEUTRAL_ACTION_INDEX,
             )
             fold1_tr_indices = tr_idx
             fold1_tr_regimes = branch_d.tr_pred_regimes
@@ -369,6 +398,7 @@ def main() -> None:
                 active_regimes=branch_d.te_pred_regimes,
                 chosen_actions=branch_d.chosen_actions_te,
                 expert_weights=branch_d.expert_weights_te,
+                prev_weights=branch_d.prev_weights_te,
                 num_experts_subset=cfg.study1_ppo.experts_per_regime,
                 n_background=256,
                 n_explain=512,
@@ -388,7 +418,9 @@ def main() -> None:
             warmup_states=branch_d.tr_states,
             warmup_returns=next_ret_all[tr_idx],
             warmup_costs=base_costs_all[tr_idx],
+            initial_action=prev_last_action_b,
         )
+        prev_last_action_b = int(branch_d.ensemble.last_final_action_)
         oos_var_b_weights.append(w_b)
 
         _, _, w_c = branch_d.ensemble.rollout_causal_policy(
@@ -401,7 +433,9 @@ def main() -> None:
             warmup_states=branch_d.tr_states,
             warmup_returns=next_ret_all[tr_idx],
             warmup_costs=base_costs_all[tr_idx],
+            initial_action=prev_last_action_c,
         )
+        prev_last_action_c = int(branch_d.ensemble.last_final_action_)
         oos_var_c_weights.append(w_c)
 
         # Variant A: Identical Study 1 pipeline (XGBoost regime gate + 3-regime K=5 dynamic ensemble),
@@ -422,12 +456,14 @@ def main() -> None:
             pool_experts=cfg.study1_ppo.experts_per_regime,
             eval_experts_subset=cfg.study1_ppo.experts_per_regime,
             prev_initial_regime=prev_last_regime_a,
+            prev_initial_action=prev_last_action_a,
             base_seed_offset=50_000,
             log_dir=training_logs_dir,
             tag_prefix=f"varA_{var_a_mode}",
             device=device,
         )
         prev_last_regime_a = branch_a.next_initial_regime
+        prev_last_action_a = branch_a.next_initial_action
         oos_var_a_weights.append(branch_a.weights_te)
         branch_a.encoder.cpu()
         branch_d.encoder.cpu()
@@ -436,6 +472,7 @@ def main() -> None:
 
         # Table 6.12 Temperature Sensitivity (K = 5)
         for t_val in cfg.evaluation.sensitivity_temp_grid:
+            tk = str(t_val)
             _, _, w_t = branch_d.ensemble.rollout_causal_policy(
                 states=branch_d.te_states,
                 active_regimes=branch_d.te_pred_regimes,
@@ -446,8 +483,10 @@ def main() -> None:
                 warmup_states=branch_d.tr_states,
                 warmup_returns=next_ret_all[tr_idx],
                 warmup_costs=base_costs_all[tr_idx],
+                initial_action=prev_last_action_temp[tk],
             )
-            oos_temp_weights[str(t_val)].append(w_t)
+            prev_last_action_temp[tk] = int(branch_d.ensemble.last_final_action_)
+            oos_temp_weights[tk].append(w_t)
 
         # Table 6.13 Experts-per-Regime Sensitivity (K in {3, 5, 7}, T = 10.0)
         for k_val in expert_keys:
@@ -461,7 +500,9 @@ def main() -> None:
                 warmup_states=branch_d.tr_states,
                 warmup_returns=next_ret_all[tr_idx],
                 warmup_costs=base_costs_all[tr_idx],
+                initial_action=prev_last_action_k[k_val],
             )
+            prev_last_action_k[k_val] = int(branch_d.ensemble.last_final_action_)
             oos_k_weights[k_val].append(w_k)
 
     cat_idx = np.concatenate(oos_indices_all)
@@ -532,12 +573,36 @@ def main() -> None:
         teacher_is_oos=teacher_is_oos,
     )
 
+    oos_regime_counts = np.bincount(cat_oos_regimes, minlength=3).tolist()
+    oos_regime_switches = (
+        float(np.mean(cat_oos_regimes[1:] != cat_oos_regimes[:-1]))
+        if len(cat_oos_regimes) > 1
+        else 0.0
+    )
+
     metrics_payload = {
         "config_sha256": cfg.config_sha256,
         "pretrained_resnet": use_pretrained,
         "ppo_rollouts_per_fold": ppo_rollouts,
         "variant_a_modality_mode": var_a_mode,
         "news_headlines_loaded": int(len(news_store.df)),
+        "d15_structural_settings": {
+            "trend_scan_use_quantile": bool(cfg.study1_encoders.trend_scan_use_quantile),
+            "trend_quantile": float(cfg.study1_encoders.trend_quantile),
+            "trend_scan_unit_root_scale": bool(cfg.study1_encoders.trend_scan_unit_root_scale),
+            "include_prev_weight": bool(cfg.study1_ppo.include_prev_weight),
+            "respect_segment_boundaries": bool(cfg.study1_ppo.respect_segment_boundaries),
+            "xgb_balance_classes": bool(cfg.study1_encoders.xgb_balance_classes),
+            "regime_confirm_bars": int(cfg.study1_encoders.regime_confirm_bars),
+            "regime_switch_threshold": float(cfg.study1_encoders.regime_switch_threshold),
+        },
+        "train_label_counts_by_fold": train_label_counts_by_fold,
+        "oos_regime_counts": {
+            "bull_0": int(oos_regime_counts[0]),
+            "bear_1": int(oos_regime_counts[1]),
+            "sideways_2": int(oos_regime_counts[2]),
+            "switches_per_bar": round(oos_regime_switches, 5),
+        },
         "ablation_study1_variants": {
             "Variant_A_no_multimodal": res_var_a.summary.to_dict(),
             "Variant_B_static_1_over_N": res_var_b.summary.to_dict(),

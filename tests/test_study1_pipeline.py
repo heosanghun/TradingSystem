@@ -373,3 +373,106 @@ def test_vectorized_per_rewards_and_ppo_convergence_logging(tmp_path) -> None:
         "greedy_action_dist",
     }
     assert required_keys.issubset(sample_payload["rollout_logs"][0].keys())
+
+
+def test_d15_quantile_trend_scan_confirm_gate_and_markov_prev_weight() -> None:
+    df = _make_synthetic_ohlcv(360)
+    lbl_q = TrendScanningLabeler(
+        horizon_min=24, horizon_max=72, horizon_step=12, trend_quantile=0.60, unit_root_scale=False
+    )
+    labels = lbl_q.fit_label_train_fold(df["close"])
+    assert np.all(labels[-72:] == -1)
+    valid = labels[:-72]
+    assert np.all(valid >= 0)
+    sideways_share = float(np.mean(valid == REGIME_SIDEWAYS))
+    assert 0.55 <= sideways_share <= 0.65
+
+    # 2-bar consecutive confirmation hysteresis gate
+    probs = np.array(
+        [
+            [0.70, 0.15, 0.15],  # 1st Bull spike -> still Sideways (needs 2 bars)
+            [0.20, 0.20, 0.60],  # resets pending streak
+            [0.68, 0.17, 0.15],  # 1st Bull bar
+            [0.64, 0.20, 0.16],  # 2nd consecutive Bull bar -> switches to Bull (0)
+            [0.15, 0.72, 0.13],  # 1st Bear spike -> stays Bull (0)
+            [0.10, 0.75, 0.15],  # 2nd consecutive Bear bar -> switches to Bear (1)
+        ],
+        dtype=np.float32,
+    )
+    gated = XGBoostRegimeClassifier.apply_hysteresis_gate(
+        probs, threshold=0.60, initial_regime=REGIME_SIDEWAYS, confirm_bars=2
+    )
+    assert gated.tolist() == [
+        REGIME_SIDEWAYS,
+        REGIME_SIDEWAYS,
+        REGIME_SIDEWAYS,
+        REGIME_BULL,
+        REGIME_BULL,
+        REGIME_BEAR,
+    ]
+
+    # Segmented reward reset + Markov prev_weight (129-d) ensemble + Shapley compatibility
+    rng = np.random.default_rng(2027)
+    n_tr, n_te = 96, 48
+    concat_te = rng.normal(0.0, 1.0, size=(n_te, 224)).astype(np.float32)
+    fusion = CrossModalStateFusion(d_visual=128, d_tech=64, d_senti=32, d_model=128)
+    tr_states = rng.normal(0.0, 1.0, size=(n_tr, 128)).astype(np.float32)
+    with torch.no_grad():
+        te_states = fusion(
+            torch.from_numpy(concat_te[:, :128]),
+            torch.from_numpy(concat_te[:, 128:192]),
+            torch.from_numpy(concat_te[:, 192:]),
+        ).numpy()
+
+    # Non-contiguous regime mask (gaps force segment resets)
+    tr_regimes = np.array([(i // 6) % 3 for i in range(n_tr)], dtype=np.int64)
+    te_regimes = np.array([(i // 8) % 3 for i in range(n_te)], dtype=np.int64)
+    rets = rng.normal(0.0, 0.005, size=n_tr + n_te)
+    costs = np.full(n_tr + n_te, 0.0006)
+
+    ens = DynamicRegimeEnsemble(
+        state_dim=128,
+        experts_per_regime=2,
+        rolling_sharpe_window_bars=24,
+        ppo_kwargs={
+            "device": torch.device("cpu"),
+            "minibatch_size": 32,
+            "ppo_epochs": 2,
+            "include_prev_weight": True,
+            "respect_segment_boundaries": True,
+        },
+    )
+    ens.train_all_pools(tr_states, tr_regimes, rets[:n_tr], costs[:n_tr], total_rollouts=2)
+    ens_probs, acts, w_te = ens.rollout_causal_policy(
+        states=te_states,
+        active_regimes=te_regimes,
+        bar_asset_returns=rets[n_tr:],
+        one_way_cost_rates=costs[n_tr:],
+        temperature=10.0,
+        num_experts_subset=2,
+        warmup_states=tr_states,
+        warmup_returns=rets[:n_tr],
+        warmup_costs=costs[:n_tr],
+        initial_action=3,  # starts from +0.5 carried from prior fold
+    )
+    assert ens_probs.shape == (n_te, 5)
+    assert ens.last_rollout_prev_weights_ is not None
+    assert np.isclose(float(ens.last_rollout_prev_weights_[0]), 0.5)
+    if n_te > 1:
+        assert np.allclose(ens.last_rollout_prev_weights_[1:], w_te[:-1])
+
+    shap_out = compute_modality_group_shapley(
+        concat_modalities=concat_te,
+        fusion_module=fusion,
+        ensemble=ens,
+        active_regimes=te_regimes,
+        chosen_actions=acts,
+        expert_weights=ens.last_rollout_expert_weights_,
+        prev_weights=ens.last_rollout_prev_weights_,
+        num_experts_subset=2,
+        n_background=24,
+        n_explain=24,
+        seed=7,
+        device=torch.device("cpu"),
+    )
+    assert np.isclose(shap_out.visual_pct + shap_out.tech_pct + shap_out.sentiment_pct, 100.0, atol=1e-4)

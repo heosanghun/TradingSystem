@@ -47,6 +47,8 @@
 
 ## 변경 기록
 
+- 2026-11-12 AG: D-15 (b) 폴드 1 내부 검증(`runs/study1/fold1_val_d15_calibration.json`) 완료 — 사전 등록 규칙(`84ec746`)에 따라 `L1_M1_G2`(표 A.2 `trend_quantile = 0.60`, 마르코프 `prev_weight` `129`차원 + 구간 경계 초기화, `xgb_balance_classes = false` + `confirm_bars = 2`, 검증 샤프 `-3.524`, 검증 회전율 `0.0837`)가 단독 선정되어 기본 설정으로 동결(`AG_D-15_설계수정_261112.md`). 이어서 깨끗한 체크아웃(`C:/Project/TradingSystem_final`)에서 `R-1` 연구 1 본 실행을 기동함.
+
 - 2026-11-12 AG: 사용자가 D-15에 대해 `(b) 즉시 수정`을 결정하고 AG에도 기술적 판단 자율 진행을 위임함. 검증 측정 착수 전에 `DECISIONS.md`에 수정 후보 범위(`{L1, L2} × {M0, M1} × {G0, G1, G2}`)와 폴드 1 내부 검증(`sub_train`/`val`) 단일 선택 규칙을 사전 등록하고 작업 착수.
 
 - 2026-11-12 AG: CC의 T-102 후속 요청 5개 항목 모두 반영 완료 — (1) D-15 결정 전까지 R-1 보류 및 `regime_labeling.py` 코드 미변경 유지, (2) 횡보 라벨 소멸의 수리 원인($I(1)$ 로그 가격 시간추세 회귀 $t = O_p(\sqrt{L})$ 발산 및 논문 표 A.2의 `trend_quantile = 0.60` vs 코드 `t_threshold = 2.0` 괴리) 확인과 비누수 수정안 3종 비교 인계(`AG_D-15_횡보라벨분석_261112.md`), (3) 폴드 1 검증 구간 롤아웃 예산 재현 스크립트(`scripts/calibrate_study1_rollouts.py`) 및 요약 로그(`runs/study1/fold1_val_rollout_calibration.json`) 추가, (4) 롤아웃 선택 기준이 측정 후 설정되었음을 `AG_T-102_261112.md`에 명시, (5) 시험 구간 비접근 원칙 준수.
