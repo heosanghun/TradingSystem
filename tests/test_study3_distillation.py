@@ -196,3 +196,58 @@ def test_study3_blocks_missing_1m_or_teacher_signals_in_production_mode(tmp_path
     )
     assert proc.returncode != 0
     assert "teacher artifacts" in (proc.stderr + proc.stdout)
+
+
+def test_student_oos_hidden_export_roundtrips_with_make_latent_figure(tmp_path: Path) -> None:
+    import importlib.util
+    import os
+
+    spec = importlib.util.spec_from_file_location(
+        "run_study3_mod", PROJECT_ROOT / "scripts" / "run_study3.py"
+    )
+    assert spec is not None and spec.loader is not None
+    run_study3 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run_study3)
+
+    # Use millisecond-resolution UTC index matching BinanceDataFetcher parquet timestamps
+    idx_ms = pd.date_range("2022-04-15", periods=260, freq="6h", tz="UTC").as_unit("ms")
+    rng = np.random.default_rng(7)
+    lob_batch = torch.as_tensor(rng.standard_normal((len(idx_ms), 40, 100)).astype(np.float32))
+    student = Student1DCNN()
+    student.eval()
+    with torch.no_grad():
+        hidden = student.encode_hidden(lob_batch).cpu().numpy()
+
+    hidden_path = tmp_path / "student_oos_hidden.npz"
+    run_study3._save_student_oos_hidden(hidden_path, idx_ms, hidden)
+
+    loaded = np.load(hidden_path)
+    assert set(loaded.files) == {"timestamps_ns", "hidden"}
+    assert loaded["hidden"].shape == (len(idx_ms), 128)
+    assert loaded["hidden"].dtype == np.float32
+    decoded_ts = pd.to_datetime(loaded["timestamps_ns"], utc=True)
+    assert list(decoded_ts) == list(idx_ms)
+
+    out_fig_dir = tmp_path / "figures"
+    env = dict(os.environ, CUDA_VISIBLE_DEVICES="")
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "make_latent_figure.py"),
+            "--hidden-file",
+            str(hidden_path),
+            "--out-dir",
+            str(out_fig_dir),
+            "--permutations",
+            "5",
+        ],
+        cwd=str(PROJECT_ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+    assert (out_fig_dir / "student_latent_tsne.png").is_file()
+    assert (out_fig_dir / "student_latent_tsne.json").is_file()
+
