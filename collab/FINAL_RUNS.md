@@ -36,7 +36,7 @@ C:/Project/TradingSystem/.venv/Scripts/python.exe scripts/run_study1.py <인자>
 `C:/Project/TradingSystem_final`에서, `PYTHONPATH`를 그 체크아웃의 `src`로 두고 `TS_SMOKE_RUN`은 비운 채 실행합니다. Ollama 서버가 떠 있어야 합니다.
 
 ```
-C:/Project/TradingSystem/.venv/Scripts/python.exe scripts/run_study2.py --debate-stride 4 --counterfactual-every 2 --edge-top-k 30 --llm-backend ollama --llm-endpoint http://localhost:11434/api/chat --llm-model deepseek-r1:32b
+C:/Project/TradingSystem/.venv/Scripts/python.exe scripts/run_study2.py --debate-stride 4 --counterfactual-every 2 --edge-top-k 30 --llm-backend ollama --llm-endpoint http://127.0.0.1:11434/api/chat --llm-model deepseek-r1:32b
 ```
 
 - 중단되면 같은 커밋에서 같은 명령을 다시 실행합니다. `runs/study2/checkpoint.sqlite`에서 이어집니다. 코드나 인자가 바뀌면 체크포인트 식별자가 달라져 처음부터 다시 돕니다(LLM 응답 캐시는 남아 있어 이미 받은 응답은 재사용).
