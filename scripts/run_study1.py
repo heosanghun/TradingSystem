@@ -156,6 +156,7 @@ def _run_study1_fold_branch(
         next_bar_returns=next_ret_all[tr_idx],
         cost_rates=base_costs_all[tr_idx],
         total_rollouts=ppo_rollouts,
+        sideways_turnover_penalty=cfg.study1_ppo.sideways_turnover_penalty,
         log_dir=log_dir,
         fold_id=fold.fold_id,
         tag_prefix=tag_prefix,

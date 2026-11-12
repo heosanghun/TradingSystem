@@ -68,7 +68,11 @@ class DynamicRegimeEnsemble:
         log_dir: Optional[Union[str, Path]] = None,
         fold_id: Optional[int] = None,
         tag_prefix: str = "",
+        sideways_turnover_penalty: Optional[float] = None,
     ) -> Dict[int, List[float]]:
+        # `sideways_turnover_penalty` is C of Eq. (III.19). None keeps the expert default.
+        reward_kwargs = ({} if sideways_turnover_penalty is None
+                         else {"sideways_turnover_penalty": float(sideways_turnover_penalty)})
         summary: Dict[int, List[float]] = {}
         log_root = Path(log_dir) if log_dir is not None else None
         if log_root is not None:
@@ -84,6 +88,7 @@ class DynamicRegimeEnsemble:
                     cost_rates=cost_rates,
                     regime_mask=mask,
                     total_rollouts=total_rollouts,
+                    **reward_kwargs,
                 )
                 r_trajectory.append(hist[-1] if hist else 0.0)
                 if log_root is not None and hasattr(exp, "last_training_logs_"):
