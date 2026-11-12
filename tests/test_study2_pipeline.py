@@ -181,8 +181,10 @@ def test_teacher_script_resumes_after_interruption(monkeypatch, tmp_path) -> Non
     monkeypatch.setattr(runner.MacroAssetFetcher, "build_aligned_60_asset_returns",
                         lambda *a, **k: pd.DataFrame({"BTCUSDT": np.arange(12.)}, index=index))
     monkeypatch.setattr(runner, "discover_candidate_edges_cached", lambda *a, **k: [])
-    latency = SimpleNamespace(teacher_direct=SimpleNamespace(mean_ms=1.), to_dict=lambda: {"test": True})
-    monkeypatch.setattr(runner, "benchmark_student_and_teacher_latency", lambda **k: latency)
+    stage = SimpleNamespace(mean_ms=1., median_ms=1., p99_ms=1.)
+    latency = SimpleNamespace(total=SimpleNamespace(n_runs=2, mean_ms=1., median_ms=1., p99_ms=1.),
+                              stages={"DEBATE": stage}, to_dict=lambda: {"test": True})
+    monkeypatch.setattr(runner, "benchmark_staged_pipeline", lambda *a, **k: latency)
     first = tmp_path / "interrupted"
     folder = first / "runs" / "study1"
     folder.mkdir(parents=True)
@@ -463,3 +465,74 @@ class EconometricTestClient(LLMClient):
             }
 
         raise ValueError(f"Unknown deterministic role: {role}")
+
+
+def test_citation_notations_and_rejection_categories() -> None:
+    from ts.study2.hypergraph import DynamicFinancialHypergraph, VerifiedSimpleEdge
+
+    edges = [VerifiedSimpleEdge(edge_id=f"E0{k}", source="ETHUSDT", target="BTCUSDT", te_norm=te,
+                                llm_score=0.8, weight=0.5, sign_corr=1.0, rationale="r")
+             for k, te in ((1, 0.30), (2, 0.4537))]
+    hg = DynamicFinancialHypergraph(nodes=["BTCUSDT", "ETHUSDT"], simple_edges=edges)
+    v = CitationVerifier(te_tolerance=0.05)
+
+    # Bare identifiers with a following TE value are read like bracketed citations.
+    assert v.extract_citations("E02 (ETHUSDT -> BTCUSDT, TE: 0.4537) and [Edge ID: #E01, TE: 0.3000]") == [
+        ("E02", 0.4537), ("E01", 0.30)]
+    # Ticker symbols and ordinary words are not identifiers.
+    assert v.extract_citations("ETHUSDT leads; THE12 and E-commerce are not edge IDs") == []
+
+    assert v.verify_agent_rationale("E02 (ETHUSDT -> BTCUSDT, TE: 0.4537) supports longs.", hg).is_valid
+    assert v.verify_agent_rationale("Momentum is strong.", hg).category == "missing_citation"
+    assert v.verify_agent_rationale("E77 (TE: 0.40) supports longs.", hg).category == "unknown_id"
+    assert v.verify_agent_rationale("E02 (TE: 0.9000) supports longs.", hg).category == "value_mismatch"
+    st = v.stats
+    assert (st.total_agent_outputs, st.rejected_agent_outputs) == (4, 3)
+    assert (st.rejected_missing_citation, st.rejected_unknown_id, st.rejected_value_mismatch) == (1, 1, 1)
+
+
+def test_edge_verifier_top_k_and_counts() -> None:
+    from ts.study2.causality import CandidateEdge
+    import dataclasses
+
+    fields = {f.name for f in dataclasses.fields(CandidateEdge)}
+    def cand(i, te):
+        kw = dict(edge_id=f"E{i:02d}", source=f"S{i}", target="BTCUSDT", te_norm=te, granger_p=0.01, sign_corr=1.0)
+        kw.update({name: 0.0 for name in fields - set(kw)})
+        return CandidateEdge(**kw)
+
+    cands = [cand(1, 0.10), cand(2, 0.90), cand(3, 0.50), cand(4, 0.70)]
+    llm = EconometricTestClient()
+    hg = build_daily_hypergraph(nodes=["BTCUSDT", "S1", "S2", "S3", "S4"], candidates=cands,
+                                llm_client=llm, news_context="n", max_candidates=2)
+    assert hg.verification_counts == {"candidates": 4, "sent_to_verifier": 2, "accepted": 2}
+    assert set(hg.simple_edges) == {"E02", "E04"}
+
+
+def test_ollama_call_settings_and_truncation(monkeypatch) -> None:
+    import ts.study2.llm_client as mod
+
+    sent = []
+    replies = [
+        {"message": {"content": "{"}, "done_reason": "length", "eval_count": 256, "prompt_eval_count": 100},
+        {"message": {"content": '{"decision": "ACCEPT", "confidence_score": 0.7, "economic_rationale": "x"}'},
+         "done_reason": "stop", "eval_count": 40, "prompt_eval_count": 100},
+    ]
+
+    class Resp:
+        def __init__(self, body): self.body = body
+        def raise_for_status(self): pass
+        def json(self): return self.body
+
+    def fake_post(url, json=None, timeout=None):
+        sent.append(json)
+        return Resp(replies[len(sent) - 1])
+
+    monkeypatch.setattr(mod.requests, "post", fake_post)
+    monkeypatch.setattr(mod.time, "sleep", lambda *_: None)
+    client = LLMClient(backend="ollama", model_name="m", endpoint_url="http://localhost:11434/api/chat")
+    out = client.generate_json("edge_verifier", "sys", "user")
+    assert out["decision"] == "ACCEPT"
+    assert len(sent) == 2 and client.telemetry["truncated_responses"] == 1
+    assert sent[0]["options"]["num_ctx"] == 4096 and sent[0]["options"]["num_predict"] == 256
+    assert sent[0]["messages"][-1] == {"role": "assistant", "content": mod.EMPTY_THINK_PREFILL}
