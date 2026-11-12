@@ -1,7 +1,17 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
+import pytest
 import torch
+
+from ts.config import PROJECT_ROOT
+from ts.data.lob_processor import LOBWindowProcessor
 
 from ts.future_work.film_double_buffer import (
     DoubleBufferedContextStore,
@@ -107,3 +117,64 @@ def test_appendix_d_double_buffer_and_stale_fallback() -> None:
     acts, _, stale_flag = film_student.act_with_context(torch.randn(2, 40, 100), store, now_ts=15_000.0)
     assert stale_flag and acts.shape == (2,)
     store.close()
+
+
+def test_study3_blocks_missing_1m_or_teacher_signals_in_production_mode(tmp_path: Path) -> None:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "run_study3_mod", PROJECT_ROOT / "scripts" / "run_study3.py"
+    )
+    assert spec is not None and spec.loader is not None
+    run_study3 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run_study3)
+
+    idx_1h = pd.date_range("2022-01-01", periods=5, freq="1h", tz="UTC")
+    df_1h = pd.DataFrame(
+        {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.5, "volume": 10.0},
+        index=idx_1h,
+    )
+    lob_proc = LOBWindowProcessor(seq_len=100, num_features=40, windows_per_bar=10)
+
+    # 1. Missing 1-minute sub-bars must raise RuntimeError in production mode
+    with pytest.raises(RuntimeError, match="1-minute sub-bar"):
+        run_study3._build_bar_lob_windows(df_1h, None, lob_proc, allow_hourly_test_fallback=False)
+
+    # 2. Missing teacher_signals.npz must raise FileNotFoundError
+    with pytest.raises(FileNotFoundError, match="teacher artifacts"):
+        run_study3._load_and_validate_teacher_signals(
+            study2_dir=tmp_path,
+            total_bars=10,
+            required_bar_indices=np.arange(5),
+            expected_config_sha256="abc123",
+            allow_test_fallbacks=False,
+        )
+
+    # 3. Incomplete Study 2 status or failed bars must raise RuntimeError
+    np.savez_compressed(tmp_path / "teacher_signals.npz", bar_indices=np.arange(5), w_finals=np.zeros(5))
+    (tmp_path / "consensus_texts.json").write_text(json.dumps(["ok"] * 5), encoding="utf-8")
+    (tmp_path / "metrics.json").write_text(
+        json.dumps({"status": "incomplete", "n_failed_bars": 2, "config_sha256": "abc123"}),
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="incomplete"):
+        run_study3._load_and_validate_teacher_signals(
+            study2_dir=tmp_path,
+            total_bars=10,
+            required_bar_indices=np.arange(5),
+            expected_config_sha256="abc123",
+            allow_test_fallbacks=False,
+        )
+
+    # 4. Direct CLI invocation without teacher signals exits non-zero with clear error
+    empty_s2 = tmp_path / "empty_study2"
+    empty_s2.mkdir()
+    proc = subprocess.run(
+        [sys.executable, str(PROJECT_ROOT / "scripts" / "run_study3.py"), "--study2-dir", str(empty_s2)],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode != 0
+    assert "teacher artifacts" in (proc.stderr + proc.stdout)

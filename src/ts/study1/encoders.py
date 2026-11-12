@@ -7,15 +7,15 @@ Implements the equations in the revised thesis:
 - Sentiment (`32-d`): 24h EWMA (`alpha=0.08`, Eq. III.7-III.8) and 24h window statistics -> Linear + LayerNorm
 - Cross-Modal Fusion (`128-d`): Sentiment = Query (`1x128`), `[Visual, Tech]` = Key/Value (`2x128`),
   `s_t = LayerNorm(Q + softmax(Q K^T / sqrt(128)) V)` (Eq. III.9-III.12)
-- Fold-local auxiliary regime pretraining: trains encoder parameters strictly on each training fold's
-  purged regime labels before freezing for XGBoost and PPO.
+- Supports controlled modality ablation (`modality_mode` in `{"multimodal", "tech_only", "visual_tech_no_senti"}`)
+  so Variant A keeps the downstream regime classifier and ensemble architecture unchanged.
 """
 
 from __future__ import annotations
 
 import logging
 import math
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -27,6 +27,8 @@ from torchvision.models import ResNet18_Weights, resnet18
 from ts.study1.chart_renderer import normalize_chart_batch_to_tensor
 
 logger = logging.getLogger(__name__)
+
+ModalityMode = Literal["multimodal", "tech_only", "visual_tech_no_senti"]
 
 
 class CBAMBlock(nn.Module):
@@ -242,6 +244,11 @@ class MultimodalStateEncoder(nn.Module):
     """
     Study 1 encoder producing `s_t` in `R^128` alongside individual modality vectors
     `f_visual` in `R^128`, `f_tech` in `R^64`, and `f_senti` in `R^32`.
+
+    `modality_mode`:
+      - `"multimodal"`: Chart image + technical indicators + news sentiment with 2-token cross-modal fusion (Variant D).
+      - `"tech_only"`: Single-modality technical indicator projection `16 -> 64 -> 128` (Variant A default).
+      - `"visual_tech_no_senti"`: Chart image + technical indicators without news sentiment (`192 -> 128`).
     """
 
     def __init__(
@@ -253,49 +260,111 @@ class MultimodalStateEncoder(nn.Module):
         d_senti: int = 32,
         d_state: int = 128,
         pretrained_resnet: bool = True,
+        modality_mode: ModalityMode = "multimodal",
     ) -> None:
         super().__init__()
+        if modality_mode not in ("multimodal", "tech_only", "visual_tech_no_senti"):
+            raise ValueError(f"Unsupported modality_mode: {modality_mode}")
         self.d_visual = d_visual
         self.d_tech = d_tech
         self.d_senti = d_senti
         self.d_state = d_state
         self.pretrained_resnet = bool(pretrained_resnet)
+        self.modality_mode: ModalityMode = modality_mode
 
-        self.visual_encoder = VisualResNetCBAMEncoder(out_dim=d_visual, pretrained=self.pretrained_resnet)
         self.tech_encoder = nn.Sequential(
             nn.Linear(tech_in_dim, d_tech),
             nn.ReLU(inplace=True),
             nn.LayerNorm(d_tech),
         )
-        self.senti_encoder = nn.Sequential(
-            nn.Linear(senti_in_dim, d_senti),
-            nn.GELU(),
-            nn.LayerNorm(d_senti),
-        )
-        self.fusion = CrossModalStateFusion(
-            d_visual=d_visual, d_tech=d_tech, d_senti=d_senti, d_model=d_state
-        )
+
+        if self.modality_mode in ("multimodal", "visual_tech_no_senti"):
+            self.visual_encoder: Optional[VisualResNetCBAMEncoder] = VisualResNetCBAMEncoder(
+                out_dim=d_visual, pretrained=self.pretrained_resnet
+            )
+        else:
+            self.visual_encoder = None
+
+        if self.modality_mode == "multimodal":
+            self.senti_encoder: Optional[nn.Module] = nn.Sequential(
+                nn.Linear(senti_in_dim, d_senti),
+                nn.GELU(),
+                nn.LayerNorm(d_senti),
+            )
+            self.fusion: Optional[CrossModalStateFusion] = CrossModalStateFusion(
+                d_visual=d_visual, d_tech=d_tech, d_senti=d_senti, d_model=d_state
+            )
+            self.ablation_proj: Optional[nn.Module] = None
+        elif self.modality_mode == "tech_only":
+            self.senti_encoder = None
+            self.fusion = None
+            self.ablation_proj = nn.Sequential(
+                nn.Linear(d_tech, d_state),
+                nn.LayerNorm(d_state),
+            )
+        else:
+            self.senti_encoder = None
+            self.fusion = None
+            self.ablation_proj = nn.Sequential(
+                nn.Linear(d_visual + d_tech, d_state),
+                nn.ReLU(inplace=True),
+                nn.LayerNorm(d_state),
+            )
+
         self.aux_regime_head = nn.Linear(d_state, 3)
 
     def extract_modalities(
-        self, chart_imgs: torch.Tensor, tech_x: torch.Tensor, senti_x: torch.Tensor
+        self,
+        chart_imgs: Optional[torch.Tensor],
+        tech_x: torch.Tensor,
+        senti_x: Optional[torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        f_vis = self.visual_encoder(chart_imgs)
+        b = tech_x.shape[0]
+        dev = tech_x.device
         f_tech = self.tech_encoder(tech_x)
-        f_senti = self.senti_encoder(senti_x)
+
+        if self.visual_encoder is not None:
+            if chart_imgs is None:
+                raise ValueError("chart_imgs is required when visual modality is active.")
+            f_vis = self.visual_encoder(chart_imgs)
+        else:
+            f_vis = torch.zeros((b, self.d_visual), dtype=tech_x.dtype, device=dev)
+
+        if self.senti_encoder is not None:
+            if senti_x is None:
+                raise ValueError("senti_x is required when sentiment modality is active.")
+            f_senti = self.senti_encoder(senti_x)
+        else:
+            f_senti = torch.zeros((b, self.d_senti), dtype=tech_x.dtype, device=dev)
+
         return f_vis, f_tech, f_senti
 
+    def fuse_modalities(
+        self, f_vis: torch.Tensor, f_tech: torch.Tensor, f_senti: torch.Tensor
+    ) -> torch.Tensor:
+        if self.modality_mode == "multimodal":
+            assert self.fusion is not None
+            return self.fusion(f_vis, f_tech, f_senti)
+        if self.modality_mode == "tech_only":
+            assert self.ablation_proj is not None
+            return self.ablation_proj(f_tech)
+        assert self.ablation_proj is not None
+        return self.ablation_proj(torch.cat([f_vis, f_tech], dim=-1))
+
     def forward(
-        self, chart_imgs: torch.Tensor, tech_x: torch.Tensor, senti_x: torch.Tensor
+        self,
+        chart_imgs: Optional[torch.Tensor],
+        tech_x: torch.Tensor,
+        senti_x: Optional[torch.Tensor],
     ) -> torch.Tensor:
         f_vis, f_tech, f_senti = self.extract_modalities(chart_imgs, tech_x, senti_x)
-        return self.fusion(f_vis, f_tech, f_senti)
+        return self.fuse_modalities(f_vis, f_tech, f_senti)
 
     def pretrain_on_fold_regimes(
         self,
-        chart_imgs: np.ndarray,
+        chart_imgs: Optional[np.ndarray],
         tech_x: np.ndarray,
-        senti_x: np.ndarray,
+        senti_x: Optional[np.ndarray],
         regime_labels: np.ndarray,
         epochs: int = 5,
         batch_size: int = 64,
@@ -304,10 +373,8 @@ class MultimodalStateEncoder(nn.Module):
         indices: Optional[np.ndarray] = None,
     ) -> list[float]:
         """
-        Fold-local auxiliary pretraining: trains encoder and fusion parameters strictly on the
-        training fold's purged regime labels, then freezes the encoder prior to XGBoost and PPO.
-        When `indices` is supplied, minibatches slice `chart_imgs`, `tech_x`, and `senti_x` directly
-        without allocating a fold-sized copy of `chart_imgs`.
+        Fold-local auxiliary pretraining: trains encoder parameters strictly on the training
+        fold's purged regime labels, then freezes the encoder prior to XGBoost and PPO.
         """
         dev = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.to(dev)
@@ -333,6 +400,9 @@ class MultimodalStateEncoder(nn.Module):
                 p.requires_grad_(False)
             return losses
 
+        uses_visual = self.visual_encoder is not None
+        uses_senti = self.senti_encoder is not None
+
         rng = np.random.default_rng(42)
         for _ in range(epochs):
             perm = rng.permutation(valid_local)
@@ -342,9 +412,22 @@ class MultimodalStateEncoder(nn.Module):
                 b_local = perm[s : s + batch_size]
                 b_src = fold_idx[b_local] if fold_idx is not None else b_local
 
-                imgs_t = normalize_chart_batch_to_tensor(chart_imgs[b_src], dev)
+                if uses_visual:
+                    if chart_imgs is None:
+                        raise ValueError("chart_imgs cannot be None when visual modality is active.")
+                    imgs_t: Optional[torch.Tensor] = normalize_chart_batch_to_tensor(chart_imgs[b_src], dev)
+                else:
+                    imgs_t = None
+
                 tech_t = torch.tensor(tech_x[b_src], dtype=torch.float32, device=dev)
-                senti_t = torch.tensor(senti_x[b_src], dtype=torch.float32, device=dev)
+
+                if uses_senti:
+                    if senti_x is None:
+                        raise ValueError("senti_x cannot be None when sentiment modality is active.")
+                    senti_t: Optional[torch.Tensor] = torch.tensor(senti_x[b_src], dtype=torch.float32, device=dev)
+                else:
+                    senti_t = None
+
                 y_t = torch.tensor(fold_labels[b_local], dtype=torch.long, device=dev)
 
                 opt.zero_grad()
@@ -367,15 +450,15 @@ class MultimodalStateEncoder(nn.Module):
     @torch.no_grad()
     def encode_dataset(
         self,
-        chart_imgs: np.ndarray,
+        chart_imgs: Optional[np.ndarray],
         tech_x: np.ndarray,
-        senti_x: np.ndarray,
+        senti_x: Optional[np.ndarray],
         batch_size: int = 128,
         device: Optional[torch.device] = None,
         indices: Optional[np.ndarray] = None,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Batch-encode `(N, 128)` fused states `s_t` and `(N, 224)` concatenated modality vectors
+        Batch-encode `(N, 128)` states `s_t` and `(N, 224)` concatenated modality vectors
         `[f_vis(128), f_tech(64), f_senti(32)]` with minibatch-level uint8 normalization.
         """
         dev = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -387,16 +470,31 @@ class MultimodalStateEncoder(nn.Module):
         states = np.empty((n, self.d_state), dtype=np.float32)
         concat_mods = np.empty((n, self.d_visual + self.d_tech + self.d_senti), dtype=np.float32)
 
+        uses_visual = self.visual_encoder is not None
+        uses_senti = self.senti_encoder is not None
+
         for s in range(0, n, batch_size):
             e = min(n, s + batch_size)
             b_src = fold_idx[s:e] if fold_idx is not None else slice(s, e)
 
-            imgs_t = normalize_chart_batch_to_tensor(chart_imgs[b_src], dev)
+            if uses_visual:
+                if chart_imgs is None:
+                    raise ValueError("chart_imgs cannot be None when visual modality is active.")
+                imgs_t: Optional[torch.Tensor] = normalize_chart_batch_to_tensor(chart_imgs[b_src], dev)
+            else:
+                imgs_t = None
+
             tech_t = torch.tensor(tech_x[b_src], dtype=torch.float32, device=dev)
-            senti_t = torch.tensor(senti_x[b_src], dtype=torch.float32, device=dev)
+
+            if uses_senti:
+                if senti_x is None:
+                    raise ValueError("senti_x cannot be None when sentiment modality is active.")
+                senti_t: Optional[torch.Tensor] = torch.tensor(senti_x[b_src], dtype=torch.float32, device=dev)
+            else:
+                senti_t = None
 
             f_vis, f_tech, f_senti = self.extract_modalities(imgs_t, tech_t, senti_t)
-            st = self.fusion(f_vis, f_tech, f_senti)
+            st = self.fuse_modalities(f_vis, f_tech, f_senti)
             states[s:e] = st.cpu().numpy()
             concat_mods[s:e] = torch.cat([f_vis, f_tech, f_senti], dim=-1).cpu().numpy()
 

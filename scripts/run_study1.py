@@ -1,20 +1,22 @@
 """
-WP2 — Study 1 Walk-Forward Execution (Multimodal Encoders + XGBoost Regime + Dynamic PPO+PER Ensemble).
+Study 1 Walk-Forward Execution (Multimodal Encoders, XGBoost Regime Gate, and Dynamic PPO+PER Ensemble).
 
-Measures & records:
-- Table 6.9 & Table 6.15 Row 3: Period II (`2022`) KernelSHAP modality attribution (`Visual` vs `Tech + Sentiment`)
-- Table 6.10: `Variant D` (Study 1 standalone without Teacher debate/distillation), `Variant A` (Tech-only), `Variant B` (Static 1/N), `Variant C` (Single agent K=1)
-- Table 6.12 (5 blank cells): Ensemble temperature sensitivity `T ∈ {1, 5, 10, 20, 'static_1_over_N'}`
-- Table 6.13 (9 blank cells): Experts per regime sensitivity `K ∈ {3, 5, 7}` (`{Sharpe, Sortino, MDD}`)
-- Exports OOS regime sequence & action probabilities (`runs/study1/study1_oos_signals.npz`) for Study 2.
+Measures and records:
+- Table 6.9: Period II (2022) group-level Shapley modality attribution (`visual_pct`, `tech_pct`, `sentiment_pct`)
+- Table 6.10: `Variant D` (Study 1 standalone), `Variant A` (Modality ablation keeping regime gate and ensemble),
+  `Variant B` (Static 1/N weights), `Variant C` (Single expert K=1)
+- Table 6.12: Ensemble temperature sensitivity `T in {1, 5, 10, 20, 'static_1_over_N'}`
+- Table 6.13: Experts per regime sensitivity `K in {3, 5, 7}` (`{Sharpe, Sortino, MDD}`)
+- Exports out-of-sample regime sequence and action probabilities (`runs/study1/study1_oos_signals.npz`) for Study 2.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -25,32 +27,179 @@ from ts.data.binance_fetcher import BinanceDataFetcher
 from ts.data.news_fetcher import PointInTimeNewsStore
 from ts.eval.backtester import CausalPortfolioBacktester
 from ts.eval.cost_model import compute_phase2_bar_base_cost_rates
-from ts.eval.shap_analysis import ModalitySHAPResult, compute_modality_kernel_shap
-from ts.eval.walk_forward import generate_phase2_walk_forward_folds
+from ts.eval.walk_forward import WalkForwardFold, generate_phase2_walk_forward_folds
 from ts.ledger import NumberLedger, RunContext
+from ts.study1.attribution import ModalityAttributionResult, compute_modality_group_shapley
 from ts.study1.chart_renderer import CandlestickChartRenderer
-from ts.study1.encoders import MultimodalStateEncoder, TechnicalIndicatorCalculator
+from ts.study1.encoders import ModalityMode, MultimodalStateEncoder, TechnicalIndicatorCalculator
 from ts.study1.ensemble import DynamicRegimeEnsemble
-from ts.study1.ppo_expert import ACTION_WEIGHTS, RegimePPOExpert
 from ts.study1.regime_classifier import XGBoostRegimeClassifier
-from ts.study1.regime_labeling import REGIME_BEAR, REGIME_SIDEWAYS, TrendScanningLabeler
+from ts.study1.regime_labeling import REGIME_SIDEWAYS, TrendScanningLabeler
+
+
+@dataclass
+class _FoldBranchOutput:
+    encoder: MultimodalStateEncoder
+    ensemble: DynamicRegimeEnsemble
+    tr_states: np.ndarray
+    te_states: np.ndarray
+    te_concat_mods: np.ndarray
+    tr_pred_regimes: np.ndarray
+    te_pred_regimes: np.ndarray
+    ens_probs_te: np.ndarray
+    chosen_actions_te: np.ndarray
+    weights_te: np.ndarray
+    expert_weights_te: np.ndarray
+    next_initial_regime: int
+
+
+def _run_study1_fold_branch(
+    *,
+    fold: WalkForwardFold,
+    tr_labels: np.ndarray,
+    charts_all: np.ndarray,
+    tech_all: np.ndarray,
+    senti_all: np.ndarray,
+    next_ret_all: np.ndarray,
+    base_costs_all: np.ndarray,
+    cfg: SystemConfig,
+    modality_mode: ModalityMode,
+    pretrained_resnet: bool,
+    pretrain_epochs: int,
+    ppo_rollouts: int,
+    pool_experts: int,
+    eval_experts_subset: int,
+    prev_initial_regime: int,
+    base_seed_offset: int,
+    log_dir: Optional[Path],
+    tag_prefix: str,
+    device: torch.device,
+) -> _FoldBranchOutput:
+    """
+    Shared fold pipeline used by both Variant D (`modality_mode='multimodal'`) and
+    Variant A (`modality_mode='tech_only'` or `'visual_tech_no_senti'`), ensuring that
+    the two variants differ solely in encoder input modality.
+    """
+    tr_idx = fold.train_indices
+    te_idx = fold.test_indices
+
+    encoder = MultimodalStateEncoder(
+        pretrained_resnet=pretrained_resnet,
+        modality_mode=modality_mode,
+    )
+    encoder.pretrain_on_fold_regimes(
+        chart_imgs=charts_all,
+        tech_x=tech_all,
+        senti_x=senti_all,
+        regime_labels=tr_labels,
+        epochs=pretrain_epochs,
+        device=device,
+        indices=tr_idx,
+    )
+    tr_states, _ = encoder.encode_dataset(
+        charts_all, tech_all, senti_all, device=device, indices=tr_idx
+    )
+    te_states, te_concat_mods = encoder.encode_dataset(
+        charts_all, tech_all, senti_all, device=device, indices=te_idx
+    )
+
+    clf = XGBoostRegimeClassifier(
+        n_estimators=cfg.study1_encoders.xgb_n_estimators,
+        max_depth=cfg.study1_encoders.xgb_max_depth,
+        learning_rate=cfg.study1_encoders.xgb_learning_rate,
+        switch_threshold=cfg.study1_encoders.regime_switch_threshold,
+        random_state=42 + fold.fold_id + base_seed_offset,
+    )
+    clf.fit(tr_states, tr_labels)
+    tr_pred_regimes, _ = clf.predict_regimes_causal(tr_states, initial_regime=prev_initial_regime)
+    te_pred_regimes, _ = clf.predict_regimes_causal(
+        te_states,
+        initial_regime=int(tr_pred_regimes[-1]) if len(tr_pred_regimes) > 0 else prev_initial_regime,
+    )
+    next_init = int(te_pred_regimes[-1]) if len(te_pred_regimes) > 0 else prev_initial_regime
+
+    ens = DynamicRegimeEnsemble(
+        state_dim=cfg.study1_encoders.cross_attn_dim,
+        experts_per_regime=pool_experts,
+        rolling_sharpe_window_bars=cfg.study1_ppo.rolling_sharpe_window_bars,
+        bars_per_year=cfg.evaluation.btc_bars_per_year,
+        base_seed=1000 * fold.fold_id + base_seed_offset,
+        ppo_kwargs={"device": device},
+    )
+    ens.train_all_pools(
+        train_states=tr_states,
+        train_regimes=tr_pred_regimes,
+        next_bar_returns=next_ret_all[tr_idx],
+        cost_rates=base_costs_all[tr_idx],
+        total_rollouts=ppo_rollouts,
+        log_dir=log_dir,
+        fold_id=fold.fold_id,
+        tag_prefix=tag_prefix,
+    )
+
+    ens_probs, chosen_acts, w_out = ens.rollout_causal_policy(
+        states=te_states,
+        active_regimes=te_pred_regimes,
+        bar_asset_returns=next_ret_all[te_idx],
+        one_way_cost_rates=base_costs_all[te_idx],
+        temperature=cfg.study1_ppo.ensemble_temperature,
+        num_experts_subset=eval_experts_subset,
+        warmup_states=tr_states,
+        warmup_returns=next_ret_all[tr_idx],
+        warmup_costs=base_costs_all[tr_idx],
+    )
+    assert ens.last_rollout_expert_weights_ is not None
+    exp_w_te = ens.last_rollout_expert_weights_.copy()
+
+    return _FoldBranchOutput(
+        encoder=encoder,
+        ensemble=ens,
+        tr_states=tr_states,
+        te_states=te_states,
+        te_concat_mods=te_concat_mods,
+        tr_pred_regimes=tr_pred_regimes,
+        te_pred_regimes=te_pred_regimes,
+        ens_probs_te=ens_probs,
+        chosen_actions_te=chosen_acts,
+        weights_te=w_out,
+        expert_weights_te=exp_w_te,
+        next_initial_regime=next_init,
+    )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run Study 1 Walk-Forward Evaluation & Sensitivity Sweeps.")
+    default_news = PROJECT_ROOT / "data" / "news_headlines.parquet"
+    parser = argparse.ArgumentParser(description="Run Study 1 Walk-Forward Evaluation and Sensitivity Sweeps.")
     parser.add_argument("--config", type=str, default=str(DEFAULT_CONFIG_PATH))
-    parser.add_argument("--news-file", type=str, default="", help="Optional CSV/Parquet news archive with published_at & headline.")
-    parser.add_argument("--offline-finbert-hash", action="store_true", help="Skip HuggingFace FinBERT download when scoring raw headlines offline.")
-    parser.add_argument("--no-pretrained-resnet", action="store_true", help="Disable ImageNet pretrained ResNet-18 weights (for offline unit tests only).")
+    parser.add_argument(
+        "--news-file",
+        type=str,
+        default=str(default_news) if default_news.exists() else "",
+        help="CSV/Parquet news archive with published_at and headline.",
+    )
+    parser.add_argument("--offline-finbert-hash", action="store_true", help="Skip HuggingFace FinBERT download in airgapped tests.")
+    parser.add_argument("--no-pretrained-resnet", action="store_true", help="Disable ImageNet pretrained ResNet-18 weights in offline tests.")
+    parser.add_argument(
+        "--variant-a-modality",
+        type=str,
+        default="tech_only",
+        choices=["tech_only", "visual_tech_no_senti"],
+        help="Input modality mode for Variant A ablation (default: single-modality tech_only; see D-12).",
+    )
     parser.add_argument("--pretrain-epochs", type=int, default=4)
-    parser.add_argument("--ppo-rollouts", type=int, default=8)
+    parser.add_argument("--ppo-rollouts", type=int, default=None)
     args = parser.parse_args()
 
     cfg = SystemConfig.from_json(args.config)
+    default_rollouts = int(getattr(cfg.study1_ppo, "default_rollouts_per_fold", 64))
+    ppo_rollouts = int(args.ppo_rollouts) if args.ppo_rollouts is not None else default_rollouts
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     cache_dir = PROJECT_ROOT / "data" / "cache"
     out_dir = PROJECT_ROOT / "runs" / "study1"
+    training_logs_dir = out_dir / "training_logs"
     out_dir.mkdir(parents=True, exist_ok=True)
+    training_logs_dir.mkdir(parents=True, exist_ok=True)
     log_path = "runs/study1/metrics.json"
     script_rel = "scripts/run_study1.py"
 
@@ -113,9 +262,11 @@ def main() -> None:
         num_folds=cfg.evaluation.walk_forward_num_folds,
     )
 
-    k_max = cfg.study1_ppo.max_experts_per_regime_for_sensitivity  # 7 experts trained once per regime!
+    k_max = cfg.study1_ppo.max_experts_per_regime_for_sensitivity
     temp_keys = [str(t) for t in cfg.evaluation.sensitivity_temp_grid]
     expert_keys = [int(k) for k in cfg.evaluation.sensitivity_experts_grid]
+    use_pretrained = not args.no_pretrained_resnet
+    var_a_mode: ModalityMode = args.variant_a_modality  # type: ignore[assignment]
 
     oos_indices_all: List[np.ndarray] = []
     oos_regimes_all: List[np.ndarray] = []
@@ -130,15 +281,19 @@ def main() -> None:
     oos_temp_weights: Dict[str, List[np.ndarray]] = {tk: [] for tk in temp_keys}
     oos_k_weights: Dict[int, List[np.ndarray]] = {kk: [] for kk in expert_keys}
 
-    shap_period2_results: List[ModalitySHAPResult] = []
-    prev_last_regime = REGIME_SIDEWAYS
+    shap_period2_results: List[ModalityAttributionResult] = []
+    prev_last_regime_d = REGIME_SIDEWAYS
+    prev_last_regime_a = REGIME_SIDEWAYS
 
     for fold in folds:
-        print(f"[Study 1] Fold {fold.fold_id}/{len(folds)}: Train [{fold.train_start.date()}..{fold.train_end.date()}] -> Test [{fold.test_start.date()}..{fold.test_end.date()}]")
+        print(
+            f"[Study 1] Fold {fold.fold_id}/{len(folds)}: "
+            f"Train [{fold.train_start.date()}..{fold.train_end.date()}] -> "
+            f"Test [{fold.test_start.date()}..{fold.test_end.date()}]"
+        )
         tr_idx = fold.train_indices
         te_idx = fold.test_indices
 
-        # 1. Strictly purged forward Trend Scanning labels on training fold only
         labeler = TrendScanningLabeler(
             horizon_min=cfg.study1_encoders.trend_scan_min_horizon,
             horizon_max=cfg.study1_encoders.trend_scan_max_horizon,
@@ -146,164 +301,147 @@ def main() -> None:
         )
         tr_labels = labeler.fit_label_train_fold(df_all["close"].iloc[tr_idx])
 
-        # 2. Fold-local encoder auxiliary pretraining -> freeze
-        encoder = MultimodalStateEncoder(pretrained_resnet=not args.no_pretrained_resnet)
-        encoder.pretrain_on_fold_regimes(
-            chart_imgs=charts_all,
-            tech_x=tech_all,
-            senti_x=senti_all,
-            regime_labels=tr_labels,
-            epochs=args.pretrain_epochs,
+        # Primary Multimodal Branch (Variant D, K_max = 7 trained once for sensitivity sweeps)
+        branch_d = _run_study1_fold_branch(
+            fold=fold,
+            tr_labels=tr_labels,
+            charts_all=charts_all,
+            tech_all=tech_all,
+            senti_all=senti_all,
+            next_ret_all=next_ret_all,
+            base_costs_all=base_costs_all,
+            cfg=cfg,
+            modality_mode="multimodal",
+            pretrained_resnet=use_pretrained,
+            pretrain_epochs=args.pretrain_epochs,
+            ppo_rollouts=ppo_rollouts,
+            pool_experts=k_max,
+            eval_experts_subset=cfg.study1_ppo.experts_per_regime,
+            prev_initial_regime=prev_last_regime_d,
+            base_seed_offset=0,
+            log_dir=training_logs_dir,
+            tag_prefix="varD",
             device=device,
-            indices=tr_idx,
         )
-        tr_states, _ = encoder.encode_dataset(charts_all, tech_all, senti_all, device=device, indices=tr_idx)
-        te_states, te_concat_mods = encoder.encode_dataset(charts_all, tech_all, senti_all, device=device, indices=te_idx)
+        prev_last_regime_d = branch_d.next_initial_regime
 
-        # 3. XGBoost regime classifier with theta = 0.60 hysteresis
-        clf = XGBoostRegimeClassifier(
-            n_estimators=cfg.study1_encoders.xgb_n_estimators,
-            max_depth=cfg.study1_encoders.xgb_max_depth,
-            learning_rate=cfg.study1_encoders.xgb_learning_rate,
-            switch_threshold=cfg.study1_encoders.regime_switch_threshold,
-            random_state=42 + fold.fold_id,
-        )
-        clf.fit(tr_states, tr_labels)
-        tr_pred_regimes, _ = clf.predict_regimes_causal(tr_states, initial_regime=prev_last_regime)
-        te_pred_regimes, _ = clf.predict_regimes_causal(
-            te_states,
-            initial_regime=int(tr_pred_regimes[-1]) if len(tr_pred_regimes) > 0 else prev_last_regime,
-        )
-        prev_last_regime = int(te_pred_regimes[-1])
-
-        # 4. Train K_max = 7 PPO+PER experts per regime once on this fold
-        ens = DynamicRegimeEnsemble(
-            state_dim=cfg.study1_encoders.cross_attn_dim,
-            experts_per_regime=k_max,
-            rolling_sharpe_window_bars=cfg.study1_ppo.rolling_sharpe_window_bars,
-            bars_per_year=cfg.evaluation.btc_bars_per_year,
-            base_seed=1000 * fold.fold_id,
-            ppo_kwargs={"device": device},
-        )
-        ens.train_all_pools(
-            train_states=tr_states,
-            train_regimes=tr_pred_regimes,
-            next_bar_returns=next_ret_all[tr_idx],
-            cost_rates=base_costs_all[tr_idx],
-            total_rollouts=args.ppo_rollouts,
-        )
-
-        # Primary Study 1 (`K = 5, T = 10.0` = Variant D)
         if fold.fold_id == 1:
-            tr_probs_d, _, _ = ens.rollout_causal_policy(
-                states=tr_states,
-                active_regimes=tr_pred_regimes,
+            tr_probs_d, _, _ = branch_d.ensemble.rollout_causal_policy(
+                states=branch_d.tr_states,
+                active_regimes=branch_d.tr_pred_regimes,
                 bar_asset_returns=next_ret_all[tr_idx],
                 one_way_cost_rates=base_costs_all[tr_idx],
                 temperature=cfg.study1_ppo.ensemble_temperature,
                 num_experts_subset=cfg.study1_ppo.experts_per_regime,
             )
             fold1_tr_indices = tr_idx
-            fold1_tr_regimes = tr_pred_regimes
+            fold1_tr_regimes = branch_d.tr_pred_regimes
             fold1_tr_probs = tr_probs_d
 
-        ens_probs_d, _, w_d = ens.rollout_causal_policy(
-            states=te_states,
-            active_regimes=te_pred_regimes,
-            bar_asset_returns=next_ret_all[te_idx],
-            one_way_cost_rates=base_costs_all[te_idx],
-            temperature=cfg.study1_ppo.ensemble_temperature,
-            num_experts_subset=cfg.study1_ppo.experts_per_regime,
-            warmup_states=tr_states,
-            warmup_returns=next_ret_all[tr_idx],
-            warmup_costs=base_costs_all[tr_idx],
-        )
         oos_indices_all.append(te_idx)
-        oos_regimes_all.append(te_pred_regimes)
-        oos_ens_probs_all.append(ens_probs_d)
-        oos_var_d_weights.append(w_d)
+        oos_regimes_all.append(branch_d.te_pred_regimes)
+        oos_ens_probs_all.append(branch_d.ens_probs_te)
+        oos_var_d_weights.append(branch_d.weights_te)
 
-        # Variant B (`static_1_over_N`, K=5) & Variant C (`K=1`, single expert)
-        _, _, w_b = ens.rollout_causal_policy(
-            states=te_states,
-            active_regimes=te_pred_regimes,
+        # Table 6.9 Exact Group Shapley on Period II (2022) folds targeting active regime chosen action logit
+        if fold.test_start.year == 2022 and branch_d.encoder.fusion is not None:
+            shap_res = compute_modality_group_shapley(
+                concat_modalities=branch_d.te_concat_mods,
+                fusion_module=branch_d.encoder.fusion,
+                ensemble=branch_d.ensemble,
+                active_regimes=branch_d.te_pred_regimes,
+                chosen_actions=branch_d.chosen_actions_te,
+                expert_weights=branch_d.expert_weights_te,
+                num_experts_subset=cfg.study1_ppo.experts_per_regime,
+                n_background=256,
+                n_explain=512,
+                seed=42 + fold.fold_id,
+                device=device,
+            )
+            shap_period2_results.append(shap_res)
+
+        # Variant B (static 1/N weights, K = 5) and Variant C (single expert K = 1)
+        _, _, w_b = branch_d.ensemble.rollout_causal_policy(
+            states=branch_d.te_states,
+            active_regimes=branch_d.te_pred_regimes,
             bar_asset_returns=next_ret_all[te_idx],
             one_way_cost_rates=base_costs_all[te_idx],
             temperature="static_1_over_N",
             num_experts_subset=cfg.study1_ppo.experts_per_regime,
-            warmup_states=tr_states,
+            warmup_states=branch_d.tr_states,
             warmup_returns=next_ret_all[tr_idx],
             warmup_costs=base_costs_all[tr_idx],
         )
         oos_var_b_weights.append(w_b)
 
-        _, _, w_c = ens.rollout_causal_policy(
-            states=te_states,
-            active_regimes=te_pred_regimes,
+        _, _, w_c = branch_d.ensemble.rollout_causal_policy(
+            states=branch_d.te_states,
+            active_regimes=branch_d.te_pred_regimes,
             bar_asset_returns=next_ret_all[te_idx],
             one_way_cost_rates=base_costs_all[te_idx],
             temperature=cfg.study1_ppo.ensemble_temperature,
             num_experts_subset=1,
-            warmup_states=tr_states,
+            warmup_states=branch_d.tr_states,
             warmup_returns=next_ret_all[tr_idx],
             warmup_costs=base_costs_all[tr_idx],
         )
         oos_var_c_weights.append(w_c)
 
-        # Variant A (Multimodal removed -> Technical indicator state only)
-        tech_agent = RegimePPOExpert(
-            regime_id=0, seed=500 + fold.fold_id, state_dim=tech_all.shape[1], device=device
+        # Variant A: Identical Study 1 pipeline (XGBoost regime gate + 3-regime K=5 dynamic ensemble),
+        # differing from Variant D only in `modality_mode`.
+        branch_a = _run_study1_fold_branch(
+            fold=fold,
+            tr_labels=tr_labels,
+            charts_all=charts_all,
+            tech_all=tech_all,
+            senti_all=senti_all,
+            next_ret_all=next_ret_all,
+            base_costs_all=base_costs_all,
+            cfg=cfg,
+            modality_mode=var_a_mode,
+            pretrained_resnet=use_pretrained,
+            pretrain_epochs=args.pretrain_epochs,
+            ppo_rollouts=ppo_rollouts,
+            pool_experts=cfg.study1_ppo.experts_per_regime,
+            eval_experts_subset=cfg.study1_ppo.experts_per_regime,
+            prev_initial_regime=prev_last_regime_a,
+            base_seed_offset=50_000,
+            log_dir=training_logs_dir,
+            tag_prefix=f"varA_{var_a_mode}",
+            device=device,
         )
-        tech_agent.train_on_fold(
-            states=tech_all[tr_idx],
-            next_bar_returns=next_ret_all[tr_idx],
-            cost_rates=base_costs_all[tr_idx],
-            total_rollouts=args.ppo_rollouts,
-        )
-        va_probs = tech_agent.predict_probs(tech_all[te_idx])
-        oos_var_a_weights.append(ACTION_WEIGHTS[np.argmax(va_probs, axis=-1)])
+        prev_last_regime_a = branch_a.next_initial_regime
+        oos_var_a_weights.append(branch_a.weights_te)
 
-        # Table 6.12 Temperature Sensitivity (`K = 5`)
+        # Table 6.12 Temperature Sensitivity (K = 5)
         for t_val in cfg.evaluation.sensitivity_temp_grid:
-            _, _, w_t = ens.rollout_causal_policy(
-                states=te_states,
-                active_regimes=te_pred_regimes,
+            _, _, w_t = branch_d.ensemble.rollout_causal_policy(
+                states=branch_d.te_states,
+                active_regimes=branch_d.te_pred_regimes,
                 bar_asset_returns=next_ret_all[te_idx],
                 one_way_cost_rates=base_costs_all[te_idx],
                 temperature=t_val,
                 num_experts_subset=cfg.study1_ppo.experts_per_regime,
-                warmup_states=tr_states,
+                warmup_states=branch_d.tr_states,
                 warmup_returns=next_ret_all[tr_idx],
                 warmup_costs=base_costs_all[tr_idx],
             )
             oos_temp_weights[str(t_val)].append(w_t)
 
-        # Table 6.13 Experts-per-Regime Sensitivity (`K ∈ {3, 5, 7}`, `T = 10.0`)
+        # Table 6.13 Experts-per-Regime Sensitivity (K in {3, 5, 7}, T = 10.0)
         for k_val in expert_keys:
-            _, _, w_k = ens.rollout_causal_policy(
-                states=te_states,
-                active_regimes=te_pred_regimes,
+            _, _, w_k = branch_d.ensemble.rollout_causal_policy(
+                states=branch_d.te_states,
+                active_regimes=branch_d.te_pred_regimes,
                 bar_asset_returns=next_ret_all[te_idx],
                 one_way_cost_rates=base_costs_all[te_idx],
                 temperature=cfg.study1_ppo.ensemble_temperature,
                 num_experts_subset=k_val,
-                warmup_states=tr_states,
+                warmup_states=branch_d.tr_states,
                 warmup_returns=next_ret_all[tr_idx],
                 warmup_costs=base_costs_all[tr_idx],
             )
             oos_k_weights[k_val].append(w_k)
-
-        # Table 6.9 KernelSHAP on Period II (`2022`) folds (Folds 2, 3, 4, 5)
-        if fold.test_start.year == 2022:
-            shap_res = compute_modality_kernel_shap(
-                concat_modalities=te_concat_mods,
-                fusion_module=encoder.fusion,
-                ensemble=ens,
-                target_regime=REGIME_BEAR,
-                seed=42 + fold.fold_id,
-                device=device,
-            )
-            shap_period2_results.append(shap_res)
 
     cat_idx = np.concatenate(oos_indices_all)
     eval_df = df_all.iloc[cat_idx].copy()
@@ -328,9 +466,13 @@ def main() -> None:
         table_6_13[str(kk)] = r_k.summary.to_dict()
 
     if shap_period2_results:
-        vis_mean = float(np.mean([s.visual_pct for s in shap_period2_results]))
-        tech_mean = float(np.mean([s.tech_pct for s in shap_period2_results]))
-        senti_mean = float(np.mean([s.sentiment_pct for s in shap_period2_results]))
+        abs_vis = float(np.mean([s.mean_abs_visual for s in shap_period2_results]))
+        abs_tech = float(np.mean([s.mean_abs_tech for s in shap_period2_results]))
+        abs_senti = float(np.mean([s.mean_abs_sentiment for s in shap_period2_results]))
+        denom = max(abs_vis + abs_tech + abs_senti, 1e-12)
+        vis_mean = float(abs_vis / denom * 100.0)
+        tech_mean = float(abs_tech / denom * 100.0)
+        senti_mean = float(abs_senti / denom * 100.0)
     else:
         vis_mean, tech_mean, senti_mean = 0.0, 0.0, 0.0
 
@@ -339,6 +481,7 @@ def main() -> None:
         "tech_pct": tech_mean,
         "sentiment_pct": senti_mean,
         "tech_plus_sentiment_pct": tech_mean + senti_mean,
+        "per_fold": [s.to_dict() for s in shap_period2_results],
     }
 
     cat_oos_regimes = np.concatenate(oos_regimes_all)
@@ -370,6 +513,10 @@ def main() -> None:
 
     metrics_payload = {
         "config_sha256": cfg.config_sha256,
+        "pretrained_resnet": use_pretrained,
+        "ppo_rollouts_per_fold": ppo_rollouts,
+        "variant_a_modality_mode": var_a_mode,
+        "news_headlines_loaded": int(len(news_store.df)),
         "ablation_study1_variants": {
             "Variant_A_no_multimodal": res_var_a.summary.to_dict(),
             "Variant_B_static_1_over_N": res_var_b.summary.to_dict(),
@@ -386,17 +533,19 @@ def main() -> None:
         stage="study1",
         flags={
             "finbert_offline_hash": bool(args.offline_finbert_hash),
-            "quick_verify": False,
-            "reduced_training_budget": bool(args.ppo_rollouts < getattr(cfg.study1_ppo, "default_rollouts_per_fold", 8) or args.pretrain_epochs < 4),
+            "quick_verify": bool(not use_pretrained),
+            "reduced_training_budget": bool(ppo_rollouts < default_rollouts or args.pretrain_epochs < 4),
         },
     )
     ledger = NumberLedger(run_context=run_ctx)
     rec_kw = dict(script_path=script_rel, config_sha256=cfg.config_sha256, run_log_path=log_path)
 
     ledger.record("T6.9_SHAP_VISUAL_PCT", "Table 6.9", "Period II SHAP Visual share", vis_mean, "{:.2f}", "%", **rec_kw)
+    ledger.record("T6.9_SHAP_TECH_PCT", "Table 6.9", "Period II SHAP Technical share", tech_mean, "{:.2f}", "%", **rec_kw)
+    ledger.record("T6.9_SHAP_SENTIMENT_PCT", "Table 6.9", "Period II SHAP Sentiment share", senti_mean, "{:.2f}", "%", **rec_kw)
     ledger.record("T6.9_SHAP_TECH_SENTI_PCT", "Table 6.9", "Period II SHAP Tech+Sentiment share", tech_mean + senti_mean, "{:.2f}", "%", **rec_kw)
 
-    ledger.record("T6.10_VAR_A_SHARPE", "Table 6.10", "Variant A (No Multimodal) Phase 2 Sharpe", res_var_a.summary.sharpe, "{:.2f}", "", **rec_kw)
+    ledger.record("T6.10_VAR_A_SHARPE", "Table 6.10", f"Variant A ({var_a_mode}) Phase 2 Sharpe", res_var_a.summary.sharpe, "{:.2f}", "", **rec_kw)
     ledger.record("T6.10_VAR_B_SHARPE", "Table 6.10", "Variant B (Static 1/N) Phase 2 Sharpe", res_var_b.summary.sharpe, "{:.2f}", "", **rec_kw)
     ledger.record("T6.10_VAR_C_SHARPE", "Table 6.10", "Variant C (Single Agent) Phase 2 Sharpe", res_var_c.summary.sharpe, "{:.2f}", "", **rec_kw)
     ledger.record("T6.10_VAR_D_SHARPE", "Table 6.10", "Variant D (Study 1 Standalone) Phase 2 Sharpe", res_var_d.summary.sharpe, "{:.2f}", "", **rec_kw)
@@ -411,7 +560,7 @@ def main() -> None:
         ledger.record(f"T6.13_EXP_{kk_str}_SORTINO", "Table 6.13", f"Experts K={kk_str} Phase 2 Sortino", float(d_k["sortino"]), "{:.2f}", "", **rec_kw)
         ledger.record(f"T6.13_EXP_{kk_str}_MDD", "Table 6.13", f"Experts K={kk_str} Phase 2 MDD", float(d_k["mdd_pct"]), "{:.2f}", "%", **rec_kw)
 
-    print("[Study 1] Completed and recorded into ledger/numbers.csv.")
+    print("[Study 1] Completed and recorded ledger entries.")
 
 
 if __name__ == "__main__":
