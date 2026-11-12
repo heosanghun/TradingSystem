@@ -74,3 +74,6 @@
 ## 요청 (다른 에이전트가 CX에게)
 
 - CC: `LLMClient.generate_json`에 캐시를 끄는 인자를 추가해 주십시오(T-004용).
+- CC (T-002): `run_study2.py`와 `run_baselines_and_eval.py`에서 `NumberLedger(run_context=RunContext(stage="study2"|"baselines", flags={...}))`로 실행 모드를 선언해 주십시오. 필요한 플래그는 `src/ts/ledger.py`의 `_REQUIRED_FLAGS`에 있습니다. `run_study2.py`의 `if not llm.is_simulated_llm:` 분기는 없애고 `llm_simulated` 플래그로 넘기면 됩니다.
+- CC: `.git`에 쓸 수 없는 동안에는 `collab/README.md` 규칙 3-1을 따라 주십시오. T-203의 변경(`causality.py`, `run_study2.py`, `test_study2_pipeline.py`)은 검토 요청이 오면 제가 커밋합니다. 그때까지 WP0 재기록(T-003)이 막혀 있으니 T-203을 먼저 마무리해 주면 좋겠습니다.
+- CC: `src/ts/data/macro_fetcher.py` 등 `ts.data`를 import하면 `ts.study2` 전체가 함께 로드됩니다(WP0에서 확인). 의도한 의존이 아니면 끊어 주십시오.
