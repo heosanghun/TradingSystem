@@ -53,12 +53,18 @@ def main() -> None:
     parser.add_argument("--config", type=str, default=str(DEFAULT_CONFIG_PATH))
     parser.add_argument("--output", type=str, default=str(PROJECT_ROOT / "runs" / "study1" / "fold1_val_sideways_penalty.json"))
     parser.add_argument("--preregistered-commit", type=str, default="")
+    parser.add_argument("--c-grid", type=str, default="", help="Comma-separated C values (default: the D-17 stage 1 grid).")
+    parser.add_argument("--confirm-grid", type=str, default="",
+                        help="Comma-separated regime confirmation lengths in bars (D-17 stage 2). Default: the configured value only.")
     args = parser.parse_args()
 
     cfg = SystemConfig.from_json(args.config)
     s1e, s1p = cfg.study1_encoders, cfg.study1_ppo
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     rollouts = int(s1p.default_rollouts_per_fold)
+    c_grid = tuple(float(x) for x in args.c_grid.split(",")) if args.c_grid else C_GRID
+    k_grid = tuple(int(x) for x in args.confirm_grid.split(",")) if args.confirm_grid else (int(s1e.regime_confirm_bars),)
+    candidates = [(c, k) for k in k_grid for c in c_grid]
 
     df_all, _ = BinanceDataFetcher(cache_dir=PROJECT_ROOT / "data" / "cache").fetch_ohlcv(
         symbol=cfg.data.primary_symbol, interval=cfg.data.bar_interval,
@@ -126,11 +132,13 @@ def main() -> None:
                                       balance_classes=bool(s1e.xgb_balance_classes), confirm_bars=int(s1e.regime_confirm_bars),
                                       random_state=43)
         clf.fit(sub_states, labels)
-        sub_r, _ = clf.predict_regimes_causal(sub_states, initial_regime=REGIME_SIDEWAYS)
-        val_r, _ = clf.predict_regimes_causal(val_states, initial_regime=int(sub_r[-1]))
 
-        for c_val in C_GRID:
+        for c_val, k_val in candidates:
             t0 = time.perf_counter()
+            # The fitted classifier is the same for every candidate; only the gate differs.
+            clf.confirm_bars = int(k_val)
+            sub_r, _ = clf.predict_regimes_causal(sub_states, initial_regime=REGIME_SIDEWAYS)
+            val_r, _ = clf.predict_regimes_causal(val_states, initial_regime=int(sub_r[-1]))
             ens = DynamicRegimeEnsemble(state_dim=s1e.cross_attn_dim, experts_per_regime=s1p.experts_per_regime,
                                         rolling_sharpe_window_bars=s1p.rolling_sharpe_window_bars,
                                         bars_per_year=cfg.evaluation.btc_bars_per_year, base_seed=1000, ppo_kwargs=dict(ppo_kwargs))
@@ -143,7 +151,8 @@ def main() -> None:
             res = bt.run_decisions(df_val, w_val, phase=2)
             gross = res.bar_gross_returns
             row = {
-                "split": split_name, "C": c_val, "sub_train_bars": int(len(sub_idx)), "val_bars": int(len(val_idx)),
+                "split": split_name, "C": c_val, "confirm_bars": int(k_val),
+                "val_regime_switches_per_bar": round(float(np.mean(val_r[1:] != val_r[:-1])), 4), "sub_train_bars": int(len(sub_idx)), "val_bars": int(len(val_idx)),
                 "val_pred_regime_counts": np.bincount(val_r, minlength=3).tolist(),
                 "val_action_counts": np.bincount(val_acts, minlength=5).tolist(),
                 "val_mean_turnover": round(float(np.mean(np.abs(np.diff(w_val, prepend=0.0)))), 4),
@@ -157,14 +166,15 @@ def main() -> None:
             rows.append(row)
 
     table = []
-    for c_val in C_GRID:
-        rs = [r for r in rows if r["C"] == c_val]
-        table.append({"C": c_val, "mean_val_sharpe": round(float(np.mean([r["val_sharpe"] for r in rs])), 3),
+    for c_val, k_val in candidates:
+        rs = [r for r in rows if r["C"] == c_val and r["confirm_bars"] == k_val]
+        table.append({"C": c_val, "confirm_bars": k_val,
+                      "mean_val_sharpe": round(float(np.mean([r["val_sharpe"] for r in rs])), 3),
                       "mean_val_turnover": round(float(np.mean([r["val_mean_turnover"] for r in rs])), 4),
                       "val_sharpe_by_split": {r["split"]: r["val_sharpe"] for r in rs}})
     best = max(t["mean_val_sharpe"] for t in table)
     tied = [t for t in table if best - t["mean_val_sharpe"] <= 0.05]
-    tied.sort(key=lambda t: (t["mean_val_turnover"], t["C"]))
+    tied.sort(key=lambda t: (t["mean_val_turnover"], t["confirm_bars"], t["C"]))
     selected = tied[0]
 
     git = read_git_state()
@@ -172,8 +182,8 @@ def main() -> None:
         "script_path": "scripts/calibrate_study1_sideways_penalty.py", "preregistered_in_commit": args.preregistered_commit,
         "executed_on_git_state": git.label, "test_fold_accessed": False, "ppo_rollouts_per_fold": rollouts,
         "selection_rule": "highest mean Phase 2 Sharpe over the two validation splits; ties within 0.05 -> lowest mean turnover -> smallest C",
-        "grid": list(C_GRID), "splits": [dict(name=s[0], val_start=s[1], val_end_exclusive=s[2]) for s in SPLITS],
-        "summary_by_C": table, "selected_C": selected["C"], "rows": rows,
+        "grid": [list(c) for c in candidates], "splits": [dict(name=s[0], val_start=s[1], val_end_exclusive=s[2]) for s in SPLITS],
+        "summary_by_candidate": table, "selected_C": selected["C"], "selected_confirm_bars": selected["confirm_bars"], "rows": rows,
     }
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(out, indent=2), encoding="utf-8")
