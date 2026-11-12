@@ -66,7 +66,9 @@ TradingSystem/
 │   │   └── xai_metrics.py           # 인용 일치율·환각 기각률·교사-학생 행동 일치율 집계기
 │   └── future_work/
 │       └── film_double_buffer.py    # 부록 D 향후 연구용 FiLM 및 이중 버퍼 공유 메모리 참조 설계
-├── scripts/                         # 단계별 본 실행 및 표 생성 스크립트
+├── tools/
+│   └── score_news_sentiment_llm.py  # DeepSeek-R1 3분류 첫 토큰 로그확률 뉴스 감성 채점기
+├── scripts/                         # 단계별 본 실행, 내부 검증, 잠재 공간 그림 및 표 생성 스크립트
 ├── ledger/                          # 최종 수치 대장(`numbers.csv`) 및 임시 기록(`provisional.csv`)
 └── tests/                           # 단위·통합·회귀 테스트 스위트
 ```
@@ -79,13 +81,13 @@ TradingSystem/
 
 1. **미시구조 입력 데이터 (제V장 3.1절, 표 5.1)**: 논문은 상위 10호가 L2 스냅샷 기반 `100틱 × 40특징` 텐서를 서술한다. `src/ts/data/tardis_adapter.py`를 통해 실제 L2 스냅샷(`book_snapshot_25`)과 체결 스트림 변환이 검증되어 있으나(2022-05-01 표본 762,983 스냅샷 기준 100틱 중앙값 10.9초), 전 기간 유료 L2 원시 자료가 없는 기본 경로(`scripts/run_study3.py`)에서는 바이낸스 1분 봉 OHLCV 및 테이커 매수 체결량으로부터 구성한 40개 미시구조 대용 특징(`lob_input_mode="subbar_1m_microstructure"`)을 사용한다. 이 대용 특징은 호가창 잔량 복원이 아니다.
 2. **뉴스 자료 출처 및 건수 (제VI장 2.1절, 표 6.1)**: 논문 표 6.1은 Bloomberg·Reuters·CoinDesk API 수집 `245,000`건을 기재하고 있으나, 실제 확보된 공개 뉴스 자료(`data/news_headlines.parquet`)는 Yahoo Finance 집계 공개 데이터셋(`edaschau/bitcoin_news`, CoinDesk·Reuters 등 포함, Bloomberg 미포함)에서 `2020-08-01`~`2023-12-31` 구간 필터링과 제목 해시 중복 제거를 거친 `50,008`건(평가 구간 `34,123`건)이다.
-3. **뉴스 감성 분류 모델 (제III장 1.4절, 표 A.2)**: 논문은 `DeepSeek-R1-Distill-Qwen-32B`를 이용한 3분류 감성 점수 산출을 서술하나, 현재 구현(`PointInTimeNewsStore.populate_missing_logits_with_finbert`)은 `ProsusAI/finbert`의 3분류 로짓(`negative`, `neutral`, `positive`)으로부터 식 (III.7)~(III.8)의 점수와 24시간 지수가중 이동평균(`alpha = 0.08`) 요약을 계산한다.
-4. **거시·교차 자산 시간봉 범위 (제IV장 2.1절, 표 A.3)**: 논문은 암호화폐·주가지수·국채·환율·원자재 약 60개 자산의 1시간 수익률을 서술한다. 바이낸스 현물에서 전 구간 1시간 봉이 수집되는 암호화폐 20종과 달리, 미국 ETF·외환·원자재의 2020~2023년 1시간 봉은 외부 시세 API 키 또는 유료 자료가 필요하다. 일봉 시계열을 1시간 격자에 반복 기입하는 방식은 시차 24 검정에서 인위적 자기상관을 유발하므로 사용하지 않는다.
+3. **뉴스 감성 분류 방식 (제III장 1.4절, 표 A.2)**: `tools/score_news_sentiment_llm.py`가 로컬 Ollama 서버(`deepseek-r1:32b`, 사고 블록 사전 종료 및 `temperature = 0`)로부터 세 클래스 단어(`Negative`, `Neutral`, `Positive`)의 첫 답변 토큰 로그확률을 조회하여 `data/news_headlines.parquet`의 `logit_neg`, `logit_neu`, `logit_pos` 열에 저장하고(상위 20개 후보 밖 단어는 반환된 최소 로그확률 상한으로 대체), 이를 식 (III.7)~(III.8)의 로짓으로 사용해 24시간 지수가중 이동평균(`alpha = 0.08`) 요약을 산출한다. 사전 채점 열이 이미 존재하면 `PointInTimeNewsStore.populate_missing_logits_with_finbert` 보조 경로는 실행되지 않는다.
+4. **거시·교차 자산 시간봉 범위 (제IV장 2.1절, 표 A.3)**: 논문은 암호화폐·주가지수·국채·환율·원자재 약 60개 자산의 1시간 수익률을 서술한다. 본 실행에서는 바이낸스 현물 시세(2020-08 상장 이후 전 구간 존재 암호화폐 14종 및 외환 대용 `EURUSDT`·`GBPUSDT` 2종)와 Alpaca 과거 시세로 수집한 미국 주식·채권·원자재 ETF 33종을 합쳐 실제 1시간 봉이 확보된 총 `49`개 자산을 사용한다. 직접 시간봉 원자료가 없는 지수 3종, 엔·호주달러 현물, 2020-08 시작 시점 미상장 암호화폐 6종은 제외하며, 일봉 시계열을 1시간 격자에 반복 기입하는 방식은 시차 24 검정에서 인위적 자기상관을 유발하므로 사용하지 않는다.
 5. **전이 엔트로피 추정량 (제IV장 2.2절, 식 IV.2~IV.3)**: 24개 시차 전체 결합분포에 대한 비모수 밀도 추정 대신, 직전 1봉 수익률과 직전 2~24봉 평균 수익률로 축약한 3차원 가우시안 커널 밀도 추정(KDE) 조건부 전이 엔트로피 근사를 사용하며 후보 쌍 탐색 시 다중비교 보정은 적용하지 않는다(`src/ts/study2/causality.py`).
 6. **메타 강화학습 비교 모델 (제VI장 1.3절)**: `MAMLMetaPPOBaseline`(`src/ts/baselines/models.py`)은 2차 도함수나 메타 검증 손실 역전파를 계산하는 원형 MAML이 아니라, 태스크별 내부 적응 파라미터와 초기 파라미터의 차이를 선형 보간하는 Reptile 방식 1차 메타 갱신으로 구현되어 있다.
 7. **모달리티 기여도 분석 (제VI장 4.2절, 표 6.9)**: 224차원 개별 특징에 대한 표본 추출식 KernelSHAP 대신, 시각(`128`)·기술(`64`)·감성(`32`) 3개 모달 블록의 `2^3 = 8`개 연합을 전수 평가하는 블록 단위 유한 Shapley 값을 각 봉의 활성 국면 전문가 풀과 선택 행동 로짓에 대해 계산한다(`src/ts/study1/attribution.py`).
 8. **소거 실험 Variant A 정의 (제III장 1.5절, 표 6.10)**: `XGBoost` 국면 분류기와 3국면 동적 앙상블 구조는 Variant D와 동일하게 유지하고 상태 인코더 입력만 기술 지표 단일 모달(기본값 `--variant-a-modality tech_only`) 또는 뉴스 감성 제거(`visual_tech_no_senti`)로 제한한다.
-9. **연구 1 국면 라벨·마르코프 상태·전환 확인 보완 (제III장 2.1~3.3절, 표 A.1~A.2, `D-15`)**: 폴드 1 학습 구간 내부 분할(`sub_train` `7,283`봉, `val` `1,458`봉, 시험 구간 미참조) 검증(`scripts/calibrate_study1_d15_fixes.py`, `runs/study1/fold1_val_d15_calibration.json`)에 따라 다음 설계 보완을 적용한다. (가) 단위근 로그 가격의 선형 추세 회귀에서 고정 `t = 2.0`을 쓰면 횡보 라벨이 소멸하므로 부록 표 A.2에 명시된 학습 폴드 내부 `60%` 분위수(`trend_quantile = 0.60`)로 임계값을 산출한다. (나) 거래 비용이 직전 목표 비중 $w_{t-1}$에 의존하는 보상 구조와의 마르코프 정합성을 위해 정책·가치 신경망 입력에 $w_{t-1}$을 포함(`129`차원)하고 비연속 국면 구간 경계에서 회전율과 GAE 부트스트랩을 초기화한다. (다) `XGBoost` 국면 분류기는 역빈도 가중 없이 경험적 사전분포를 유지하고(`xgb_balance_classes = false`), 인과 추론 시 임계값(`0.60`)을 연속 2봉 만족할 때 국면을 전환한다(`regime_confirm_bars = 2`). 또한 식 (III.22)의 PER 중요도 가중치는 영(0) TD 오차 이상치에 의한 기울기 소실을 막기 위해 상한 `10.0`과 미니배치 평균 자기정규화($\bar{\omega}=1$)를 적용하고 엔트로피 항에도 동일 가중치를 곱한다.
+9. **연구 1 국면 라벨·마르코프 상태·횡보 벌점 `C`·전환 확인 `24`봉 보완 (제III장 2.1~3.3절, 표 A.1~A.2, `D-15`, `D-17`)**: 첫 학습 폴드(`2020-10`~`2021-09`) 내부 검증 분할만 사용하고 시험 구간(`2021-10`~`2023-12`)을 일절 참조하지 않는 사전 등록 절차에 따라 다음 설정을 동결했다. (가) 단위근 로그 가격의 선형 추세 회귀에서 고정 `t = 2.0`을 쓰면 횡보 라벨이 소멸하므로 부록 표 A.2에 명시된 학습 폴드 내부 `60%` 분위수(`trend_quantile = 0.60`)로 임계값을 산출한다(`scripts/calibrate_study1_d15_fixes.py`). (나) 거래 비용이 직전 목표 비중 $w_{t-1}$에 의존하는 보상 구조와의 마르코프 정합성을 위해 정책·가치 신경망 입력에 $w_{t-1}$을 포함(`129`차원)하고 비연속 국면 구간 경계에서 회전율과 GAE 부트스트랩을 초기화한다. (다) 논문이 수치를 지정하지 않은 식 (III.19)의 횡보 국면 거래 벌점 계수 `C`는 첫 학습 폴드 내부 두 검증 구간(`2021-06~07`, `2021-08~09`) 검증(`scripts/calibrate_study1_sideways_penalty.py`, `runs/study1/fold1_val_sideways_penalty.json`)을 통해 `sideways_turnover_penalty = 0.05`로 동결했다. (라) `XGBoost` 국면 분류기는 역빈도 가중 없이 경험적 사전분포를 유지하고(`xgb_balance_classes = false`), 같은 두 내부 검증 구간 검증(`scripts/calibrate_study1_confirm_bars.py`, `runs/study1/fold1_val_regime_confirm.json`)을 통해 전환 임계(`0.60`) 연속 확인 봉 수를 `regime_confirm_bars = 24`로 동결했다(단, 시드 고정 상태에서도 GPU 연산 비결정성에 따른 실행 간 내부 검증 샤프 변동 폭이 약 `1.8`로 후보 간 격차와 유사한 수준임이 확인되어 그 한계를 함께 기록한다). 또한 식 (III.22)의 PER 중요도 가중치는 영(0) TD 오차 이상치에 의한 기울기 소실을 막기 위해 상한 `10.0`과 미니배치 평균 자기정규화($\bar{\omega}=1$)를 적용하고 엔트로피 항에도 동일 가중치를 곱한다.
 10. **부록 D 실시간 맥락 주입 설계**: `src/ts/future_work/film_double_buffer.py`는 향후 연구용 참조 구현으로 분리되어 있으며 제VI장 실험에는 사용되지 않는다.
 
 ---
@@ -112,20 +114,24 @@ python -m venv .venv
 # 1. 기초 시계열 통계(표 6.1, 6.2), 단위근·자기상관 검정, Buy & Hold, 학생 온라인 추론 지연(표 6.14)
 .\.venv\Scripts\python.exe scripts/run_wp0_data_and_stats.py
 
-# 2. 연구 1: 9폴드 Walk-Forward, 표 6.9 모달 기여도, 표 6.10 소거(Variant A~D), 표 6.12 온도 T, 표 6.13 전문가 수 K
+# 2. 뉴스 헤드라인 DeepSeek-R1 3분류 로그확률 감성 채점 (로컬 Ollama 서버 필요, 재개 지원)
+.\.venv\Scripts\python.exe tools/score_news_sentiment_llm.py
+
+# 3. 연구 1: 9폴드 Walk-Forward, 표 6.9 모달 기여도, 표 6.10 소거(Variant A~D), 표 6.12 온도 T, 표 6.13 전문가 수 K
 .\.venv\Scripts\python.exe scripts/run_study1.py
 
-# 3. 연구 2: 동적 하이퍼그래프 및 근거 중심 LLM 토론 (로컬 vLLM 또는 Ollama 서버 필요)
-.\.venv\Scripts\python.exe scripts/run_study2.py --llm-backend ollama --llm-endpoint http://localhost:11434 --llm-model deepseek-r1:32b
+# 4. 연구 2: 동적 하이퍼그래프 및 근거 중심 LLM 토론 (로컬 Ollama 서버 필요, 체크포인트 재개 지원)
+.\.venv\Scripts\python.exe scripts/run_study2.py --debate-stride 4 --counterfactual-every 2 --edge-top-k 30 --llm-backend ollama --llm-endpoint http://127.0.0.1:11434/api/chat --llm-model deepseek-r1:32b
 
-# 4. 연구 3: 오프라인 삼중 손실 추론 증류, 성질 5.1 검증, 표 6.6~6.8 제안 모델, 표 6.11 lambda_3 민감도, 표 6.15 일치율
+# 5. 연구 3: 오프라인 삼중 손실 추론 증류, 성질 5.1 검증, 표 6.6~6.8 제안 모델, 표 6.11 lambda_3 민감도, 표 6.15 일치율
 .\.venv\Scripts\python.exe scripts/run_study3.py
 
-# 5. 비교 모델(Single PPO, 정적 앙상블, Reptile식 메타 PPO) 및 Ledoit-Wolf 부트스트랩 유의성 검정
+# 6. 비교 모델(Single PPO, 정적 앙상블, Reptile식 메타 PPO) 및 Ledoit-Wolf 부트스트랩 유의성 검정
 .\.venv\Scripts\python.exe scripts/run_baselines_and_eval.py
 
-# 6. ledger/numbers.csv 기반 제VI장 마크다운 표 생성 및 누락 항목 점검
+# 7. ledger/numbers.csv 기반 제VI장 마크다운 표 및 학생 잠재 공간 t-SNE 그림 생성
 .\.venv\Scripts\python.exe scripts/make_tables.py
+.\.venv\Scripts\python.exe scripts/make_latent_figure.py
 ```
 
 전 단계를 순서대로 호출하는 오케스트레이터는 `scripts/run_full_pipeline.py`이며, 빠른 배선 점검 시 `--smoke-test`를 지정하면 자동으로 `TS_SMOKE_RUN=1`이 설정되어 최종 대장을 오염시키지 않는다.
@@ -137,8 +143,9 @@ python -m venv .venv
 현재까지 로컬 측정 환경(Windows 11, NVIDIA GeForce RTX 5090 Laptop GPU 24GB VRAM, 시스템 RAM 31GB)에서 실측이 완료된 구간의 소요 시간과 자원 사용량은 다음과 같다. 아직 본 실행을 마치지 않은 단계의 소요 시간은 추측하여 기입하지 않으며, 각 본 실행 완료 후 실측값으로 갱신한다.
 
 - **WP0 기초 통계 및 학생 온라인 추론 지연 (`scripts/run_wp0_data_and_stats.py`, 커밋 `6d77ce8`)**: `Student1DCNN.act_online` 단일 윈도우(`1 × 40 × 100`) 10,000회 반복 추론 지연 평균 `0.527 ms`, 중앙값 `0.462 ms`, 99백분위수 `1.462 ms`.
+- **뉴스 헤드라인 DeepSeek-R1 감성 채점 (`tools/score_news_sentiment_llm.py`)**: 공개 뉴스 헤드라인 `50,008`건에 대한 로컬 Ollama `deepseek-r1:32b` 3분류 첫 토큰 로그확률 산출 약 `57분`.
 - **연구 1 차트 렌더링 및 폴드 1 인코딩 메모리·시간 (`T-101`, `29,932`봉 전체 기준)**: `uint8` 캔들 차트 렌더링 `8.93초`(버퍼 `4.20 GiB`), 폴드 1(`8,741`봉) 사전학습 1에폭 + 학습·시험 인코딩 포함 총 `34.71초`, 프로세스 최대 작업 집합(Peak RSS) `6.05 GiB`(`6.49 GB`), GPU 최대 할당 메모리 `1.54 GiB`.
-- **연구 1 폴드 1 검증 구간 PPO 학습 예산 실측 (`T-102`, `scripts/calibrate_study1_rollouts.py`, 로그 `runs/study1/fold1_val_rollout_calibration.json`)**: 학습 `7,283`봉·검증 `1,458`봉 기준 `FinBERT` 뉴스 감성 채점(`15,883`건) `11.76초`, `ResNet-18 + CBAM` 4에폭 사전학습 및 인코딩 `60.97초`, 기본 예산 `default_rollouts_per_fold = 64`에서 3국면 × 5전문가(15개 전문가) 온폴리시 `PPO + PER` 학습 `142.06초`(`2.37분`).
-- **연구 1 9폴드 전체 본 실행 (`R-1`, `scripts/run_study1.py`, 커밋 `623ab60`, 로그 `runs/study1/metrics.json`)**: `BTCUSDT` `29,932`봉 차트 렌더링, 뉴스 `50,008`건 `FinBERT` 감성 채점, 9개 Walk-Forward 폴드의 Variant D(`K_max = 7`)·Variant A(`K = 5`) 인코더 사전학습 및 `64`롤아웃 학습, 구간 II 3그룹 Shapley 기여도, 온도·전문가 수 민감도 평가를 모두 포함하여 총 **`49분 11초`** 소요.
+- **연구 1 폴드 1 검증 구간 PPO 학습 예산 실측 (`T-102`, `scripts/calibrate_study1_rollouts.py`, 로그 `runs/study1/fold1_val_rollout_calibration.json`)**: 학습 `7,283`봉·검증 `1,458`봉 기준 `ResNet-18 + CBAM` 4에폭 사전학습 및 인코딩 `60.97초`, 기본 예산 `default_rollouts_per_fold = 64`에서 3국면 × 5전문가(15개 전문가) 온폴리시 `PPO + PER` 학습 `142.06초`(`2.37분`). `D-17` 폴드 1 내부 두 분할 검증(`calibrate_study1_sideways_penalty.py`, `calibrate_study1_confirm_bars.py`)은 회당 약 `15분` 소요.
+- **연구 1 9폴드 전체 본 실행 (`R-1`, `scripts/run_study1.py`, 커밋 `7022c85`, 로그 `runs/study1/metrics.json`)**: `BTCUSDT` `29,932`봉 차트 렌더링, 사전 채점된 `DeepSeek-R1` 감성 로짓 결합, 9개 Walk-Forward 폴드의 Variant D(`K_max = 7`)·Variant A(`K = 5`) 인코더 사전학습 및 `64`롤아웃 학습(`C = 0.05`, 전환 확인 `24`봉), 구간 II 3그룹 Shapley 기여도, 온도·전문가 수 민감도 평가를 모두 포함하여 약 **`68분`** 소요(직전 `FinBERT`·확인 `2`봉 설정 커밋 `623ab60`에서는 `49분 11초`).
 - **연구 2 후보 인과 엣지 탐색 (`T-203`)**: 60종 × 1,440봉(60일 창) 기준 일별 그레인저 + KDE 전이 엔트로피 탐색 약 `4.9초`.
 - **연구 2~3 및 비교 모델 9폴드 전체 본 실행**: 선행 단계 완료 후 실측 예정.
