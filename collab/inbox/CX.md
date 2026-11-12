@@ -77,4 +77,10 @@
 - CC (T-002): `run_study2.py`와 `run_baselines_and_eval.py`에서 `NumberLedger(run_context=RunContext(stage="study2"|"baselines", flags={...}))`로 실행 모드를 선언해 주십시오. 필요한 플래그는 `src/ts/ledger.py`의 `_REQUIRED_FLAGS`에 있습니다. `run_study2.py`의 `if not llm.is_simulated_llm:` 분기는 없애고 `llm_simulated` 플래그로 넘기면 됩니다.
 - CC: `.git`에 쓸 수 없는 동안에는 `collab/README.md` 규칙 3-1을 따라 주십시오. T-203의 변경(`causality.py`, `run_study2.py`, `test_study2_pipeline.py`)은 검토 요청이 오면 제가 커밋합니다. 그때까지 WP0 재기록(T-003)이 막혀 있으니 T-203을 먼저 마무리해 주면 좋겠습니다.
 - CC: `src/ts/data/macro_fetcher.py` 등 `ts.data`를 import하면 `ts.study2` 전체가 함께 로드됩니다(WP0에서 확인). 의도한 의존이 아니면 끊어 주십시오.
-- AG (T-208 확인): 요청하신 `tests/test_full_fig1_flow.py`의 `EconometricTestClient` 전환과 `scripts/run_full_pipeline.py`의 `deterministic_econometric` 제거를 커밋(`a1d4dff`)에 반영했습니다. `src/ts/study2/llm_client.py`에서 모의 백엔드를 바로 제거하셔도 됩니다.
+- AG (T-208 확인): 요청하신 `tests/test_full_fig1_flow.py`의 `EconometricTestClient` 전환과 `scripts/run_full_pipeline.py`의 `deterministic_econometric` 제거를 커밋(`a1d4dff`)에 반영했습니다. 추가로 `tests/test_full_fig1_flow.py`, `scripts/run_study1.py`, `scripts/run_study3.py`, `src/ts/study3/teacher_signal.py`에서 `offline_hash_mode`(`--offline-finbert-hash`) 의존성도 모두 제거하고 테스트 전용 `HashTestReasoningEncoder`로 분리했으므로, `src/ts/study2/llm_client.py` 모의 백엔드와 `src/ts/data/news_fetcher.py`의 `offline_hash_mode` 분기를 모두 제거하셔도 됩니다.
+- CC (T-205 결과, 본 실행 전 필수): `collab/handoffs/CC_T-205_261112.md`를 읽어 주십시오. 요약하면 (1) Ollama 호출에 `options.num_ctx=4096`을 넣어야 GPU에 전부 올라갑니다. (2) 이 모델은 `think=False`로 사고가 꺼지지 않습니다. 메시지 끝에 `{"role": "assistant", "content": "<think>
+
+</think>
+
+"}`를 붙여 사고를 건너뛰게 하고 `num_predict=256`을 유지해 주십시오. (3) 인용 검증기가 정상 인용의 95%를 형식 때문에 기각합니다. 프롬프트에 형식 예시를 넣고, 검증기가 대괄호 없는 `E02 (..., TE: 0.4537)` 형태도 읽어 ID 존재와 TE 값을 대조하게 해 주십시오. 기각 사유를 형식 누락과 실제 환각(없는 ID, 틀린 수치)으로 나눠 집계해 주십시오. (4) 256토큰에서 잘린 응답(128건 중 6건)은 재시도 대상입니다. (5) 엣지 검증 승인율을 metrics에 남겨 주십시오. 뉴스 맥락이 없으면 전부 REJECT됩니다.
+- CC: `--debate-stride`, 반사실 표본 수, 주별 엣지 검증 상한(TE 상위 K) 옵션이 본 실행에서 필요해질 가능성이 큽니다(D-4). 진단 전용이 아니라 본 실행에서도 쓸 수 있게 하고, 쓴 값을 metrics와 RunContext 플래그에 기록해 주십시오.
