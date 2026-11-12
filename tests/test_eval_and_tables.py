@@ -14,7 +14,7 @@ from ts.eval.metrics import compute_crisis_window_loss, compute_distribution_and
 from ts.eval.shap_analysis import compute_modality_kernel_shap
 from ts.eval.significance import ledoit_wolf_and_block_bootstrap_test
 from ts.eval.xai_metrics import compute_table_615_xai_metrics
-from ts.ledger import NumberLedger
+from ts.ledger import NumberLedger, RunContext
 from ts.study1.encoders import CrossModalStateFusion
 from ts.study1.ensemble import DynamicRegimeEnsemble
 from ts.study2.citation_verifier import CitationVerificationStats
@@ -101,7 +101,7 @@ def test_backtester_ledoit_wolf_shap_latency_and_27_blank_compiler(tmp_path: Pat
     assert xai.evidence_removal_flip_rate_pct == 60.0
 
     ledger_file = tmp_path / "numbers.csv"
-    ledger = NumberLedger(ledger_file)
+    ledger = NumberLedger(ledger_file, run_context=RunContext(stage="wp0", enforce_git=False))
     for nid, tbl, desc in REQUIRED_27_BLANK_IDS:
         ledger.record(nid, tbl, desc, 0.85, "{:.2f}", "", "tests/test_eval_and_tables.py", "abc123", "runs/test.json")
 
@@ -111,3 +111,42 @@ def test_backtester_ledoit_wolf_shap_latency_and_27_blank_compiler(tmp_path: Pat
     assert audit["pending_count"] == 0
     sec_611_to_613 = md.split("## 표 6.11")[1].split("## 표 6.14")[0]
     assert "측정 대기" not in sec_611_to_613
+
+
+def test_ledger_routes_non_final_runs_to_provisional(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("TS_SMOKE_RUN", raising=False)
+    path = tmp_path / "numbers.csv"
+    args = ("{:.2f}", "", "tests/x.py", "abc", "runs/x.json")
+
+    # No context at all: never final.
+    NumberLedger(path).record("A", "T", "m", 1.0, *args)
+
+    # Simulated LLM teacher behind a Study 3 number.
+    sim_flags = dict(
+        llm_simulated=True,
+        teacher_signals_present=True,
+        lob_input_mode="subbar_1m_microstructure",
+        finbert_offline_hash=False,
+        quick_verify=False,
+        reduced_training_budget=False,
+    )
+    NumberLedger(path, RunContext("study3", sim_flags, enforce_git=False)).record("B", "T", "m", 1.0, *args)
+
+    # A stage that forgot to declare its flags.
+    NumberLedger(path, RunContext("study3", {}, enforce_git=False)).record("C", "T", "m", 1.0, *args)
+
+    # Fully declared real run.
+    real_flags = dict(sim_flags, llm_simulated=False)
+    final_ledger = NumberLedger(path, RunContext("study3", real_flags, enforce_git=False))
+    final_ledger.record("D", "T", "m", 1.0, *args)
+
+    # Smoke environment variable overrides everything.
+    monkeypatch.setenv("TS_SMOKE_RUN", "1")
+    NumberLedger(path, RunContext("study3", real_flags, enforce_git=False)).record("E", "T", "m", 1.0, *args)
+
+    assert set(final_ledger.read_all()) == {"D"}
+    prov = final_ledger.read_provisional()
+    assert set(prov) == {"A", "B", "C", "E"}
+    assert "llm_simulated=True" in prov["B"]["provisional_reasons"]
+    assert "not declared" in prov["C"]["provisional_reasons"]
+    assert "TS_SMOKE_RUN" in prov["E"]["provisional_reasons"]
