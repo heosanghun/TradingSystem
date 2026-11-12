@@ -4,7 +4,7 @@ Evidence-Grounded Multi-Agent Debate & Meta PM Synthesis (Ch. IV Sec 3–4, Eqs.
 Implements:
 - Up to 3 rounds of `Alpha Analyst` ⇄ `Risk Manager` debate grounded on `H_t`
 - Mandatory programmatic citation check with automatic rejection & retry on hallucination
-- Exact Meta PM dynamic risk-aversion synthesis (Eqs. IV.7–IV.8):
+- Meta PM dynamic risk-aversion synthesis (Eqs. IV.7–IV.8):
     `α_risk = σ(β * max_{e ∈ E_neg} w(e) - γ * mean_{e ∈ E_pos} w(e))`,   `β = 8, γ = 6`
     `W_final = (1 - α_risk) * W_analyst + α_risk * W_risk ∈ [-1, 1]`
 - Counterfactual Evidence-Stripped Re-runner (`run_debate(..., strip_evidence=True)`)
@@ -97,7 +97,7 @@ class GroundedDebateEngine:
         neg_edge_weights: Sequence[float],
     ) -> tuple[float, float]:
         """
-        Exact Eqs. (IV.7)–(IV.8):
+        Eqs. (IV.7)–(IV.8):
           α_risk = σ(β * max_{e ∈ E_neg} w(e) - γ * (1/|E_pos|) Σ_{e ∈ E_pos} w(e))
           W_final = (1 - α_risk) * W_analyst + α_risk * W_risk
         """

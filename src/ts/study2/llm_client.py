@@ -17,6 +17,10 @@ import hashlib
 import json
 import re
 import sqlite3
+import logging
+import time
+import math
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -25,15 +29,52 @@ import requests
 
 THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", flags=re.DOTALL | re.IGNORECASE)
 JSON_OBJ_RE = re.compile(r"\{.*\}", flags=re.DOTALL)
+LOGGER = logging.getLogger(__name__)
+
+
+class LLMCallError(RuntimeError):
+    """Transport or response parsing failed after the configured retries."""
+
+
+def validate_role_payload(role, payload):
+    """Reject structurally incomplete role answers instead of neutral defaults."""
+    if not isinstance(payload, dict):
+        raise ValueError("The model answer is not a JSON object")
+    if role == "edge_verifier":
+        if str(payload.get("decision", "")).upper() not in ("ACCEPT", "REJECT"):
+            raise ValueError("Missing/invalid edge decision")
+        score = float(payload["confidence_score"])
+        if not math.isfinite(score) or not 0 <= score <= 1:
+            raise ValueError("Invalid edge confidence")
+        rationale = payload.get("economic_rationale")
+    elif role in ("alpha_analyst", "risk_manager"):
+        weight_key = "Proposed Portfolio Weights" if role == "alpha_analyst" else "Revised Portfolio Weights"
+        weights = payload[weight_key]
+        if not isinstance(weights, dict) or not {"Asset", "Cash"}.issubset(weights):
+            raise ValueError("Missing portfolio weights")
+        if not all(math.isfinite(float(v)) for v in weights.values()):
+            raise ValueError("Portfolio weights must be finite")
+        if role == "risk_manager" and payload.get("Rebuttal Decision") not in ("AGREE", "MODIFY", "STRONG REJECT"):
+            raise ValueError("Invalid risk rebuttal decision")
+        rationale = payload.get("Grounded Rationale" if role == "alpha_analyst" else "Risk Rationale")
+    else:
+        return
+    if not isinstance(rationale, str) or not rationale.strip():
+        raise ValueError("Role rationale is missing")
 
 
 def extract_json_object(raw_text: str) -> Dict[str, Any]:
+    if raw_text.lower().count("<think>") != raw_text.lower().count("</think>"):
+        raise ValueError("Truncated reasoning block; no complete final JSON answer")
     cleaned = THINK_BLOCK_RE.sub("", raw_text).strip()
     # Try direct parse first
     try:
-        return json.loads(cleaned)
-    except Exception:
-        pass
+        parsed = json.loads(cleaned)
+        if not isinstance(parsed, dict):
+            raise ValueError("LLM response must be a JSON object")
+        return parsed
+    except json.JSONDecodeError:
+        LOGGER.debug("Trying JSON object extraction from surrounding response text")
     match = JSON_OBJ_RE.search(cleaned)
     if match:
         return json.loads(match.group(0))
@@ -52,6 +93,8 @@ class LLMClient:
         max_tokens: int = 256,
         cache_db_path: Optional[Path] = None,
         timeout_sec: int = 60,
+        max_request_attempts: int = 3,
+        retry_backoff_sec: float = 1.0,
     ) -> None:
         self.backend = backend
         self.model_name = model_name
@@ -59,6 +102,12 @@ class LLMClient:
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.timeout_sec = timeout_sec
+        if max_request_attempts < 1 or retry_backoff_sec < 0:
+            raise ValueError("Retry attempts must be positive and backoff nonnegative")
+        self.max_request_attempts = max_request_attempts
+        self.retry_backoff_sec = retry_backoff_sec
+        self.telemetry = Counter()
+        self.use_cache = True
         self.is_simulated_llm = backend == "deterministic_econometric"
 
         self.cache_db_path = Path(cache_db_path) if cache_db_path else None
@@ -109,16 +158,63 @@ class LLMClient:
         user_prompt: str,
         retry_attempt: int = 0,
         context_hint: Optional[Dict[str, Any]] = None,
+        use_cache: bool = True,
     ) -> Dict[str, Any]:
-        key_src = f"{self.backend}|{self.model_name}|{role}|{retry_attempt}|{system_prompt}|{user_prompt}"
+        """Retry transient transport and malformed JSON failures; never cache failures.
+
+        ``use_cache=False`` bypasses both reads and writes, including during a
+        teacher latency benchmark. Permanent failures are explicit exceptions.
+        """
+        self.telemetry["logical_calls"] += 1
+        for attempt in range(self.max_request_attempts):
+            try:
+                parsed = self._generate_json_once(role, system_prompt, user_prompt,
+                                                  retry_attempt, context_hint,
+                                                  use_cache and self.use_cache)
+                validate_role_payload(role, parsed)
+                return parsed
+            except (requests.RequestException, ValueError, KeyError, IndexError, TypeError) as exc:
+                self.telemetry["failed_attempts"] += 1
+                LOGGER.warning("LLM call failed: role=%s attempt=%d/%d error=%s",
+                               role, attempt + 1, self.max_request_attempts, type(exc).__name__)
+                if attempt + 1 == self.max_request_attempts:
+                    self.telemetry["failed_calls"] += 1
+                    raise LLMCallError(f"{role}: {type(exc).__name__} after {attempt+1} attempts") from exc
+                self.telemetry["retries"] += 1
+                time.sleep(min(30., self.retry_backoff_sec * 2 ** attempt))
+        raise AssertionError("Unreachable retry state")
+
+    def _generate_json_once(
+        self,
+        role: str,
+        system_prompt: str,
+        user_prompt: str,
+        retry_attempt: int = 0,
+        context_hint: Optional[Dict[str, Any]] = None,
+        use_cache: bool = True,
+    ) -> Dict[str, Any]:
+        key_src = json.dumps([self.backend, self.endpoint_url, self.model_name, role,
+                              retry_attempt, self.temperature, self.max_tokens,
+                              system_prompt, user_prompt, context_hint if self.is_simulated_llm else None],
+                             sort_keys=True)
         cache_key = hashlib.sha256(key_src.encode("utf-8")).hexdigest()
 
-        if retry_attempt == 0:
+        if use_cache and retry_attempt == 0:
             cached = self._lookup_cache(cache_key)
             if cached is not None:
-                return cached
+                try:
+                    validate_role_payload(role, cached)
+                except (ValueError, KeyError, TypeError):
+                    LOGGER.warning("Ignoring malformed cached role answer: %s", role)
+                    self.telemetry["invalid_cache_entries"] += 1
+                    with sqlite3.connect(str(self.cache_db_path)) as conn:
+                        conn.execute("DELETE FROM llm_cache WHERE cache_key=?", (cache_key,))
+                else:
+                    self.telemetry["cache_hits"] += 1
+                    return cached
 
         if self.backend == "openai_compat":
+            self.telemetry["http_calls"] += 1
             resp = requests.post(
                 self.endpoint_url,
                 json={
@@ -137,6 +233,7 @@ class LLMClient:
             text = resp.json()["choices"][0]["message"]["content"]
             parsed = extract_json_object(text)
         elif self.backend == "ollama":
+            self.telemetry["http_calls"] += 1
             resp = requests.post(
                 self.endpoint_url,
                 json={
@@ -162,7 +259,8 @@ class LLMClient:
         else:
             raise ValueError(f"Unsupported LLM backend: {self.backend}")
 
-        if retry_attempt == 0:
+        validate_role_payload(role, parsed)
+        if use_cache and retry_attempt == 0:
             self._store_cache(cache_key, role, parsed)
         return parsed
 

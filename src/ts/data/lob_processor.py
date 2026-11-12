@@ -3,7 +3,7 @@ Limit Order Book (LOB) & Sub-Bar Microstructure Window Processor (`100 × 40`).
 
 Implements Chapter V Sec 3.1 (Table 5.1) & Appendix A (Table A.4):
 - Window shape: `100 ticks × 40 features` (transposed to `(40, 100)` for PyTorch `Conv1d`)
-- Exact 40-feature composition (`20 + 10 + 10`):
+- 40-feature composition (`20 + 10 + 10`):
   1. [0..19]  Top-10 Bid & Ask Depth Volume Ratios (20 features)
   2. [20..29] Level Spreads & Multi-Lag Mid-Price Change Rates (10 features)
   3. [30..39] Recent Tick Trade Volume, Direction, & Flow Imbalance (10 features)
@@ -150,12 +150,14 @@ class LOBWindowProcessor:
     def extract_from_subbar_klines(
         self, subbar_df: pd.DataFrame, decision_idx_inclusive: int
     ) -> Tuple[np.ndarray, str]:
-        """
-        Explicit Fallback Adapter (`구현계획_261111.md` Sec 6.2):
-        Constructs a deterministic, strictly causal `(40, 100)` microstructure tensor
-        from trailing 100 sub-bars (e.g. 1m Binance klines including `taker_buy_base_vol`,
-        `quote_volume`, `num_trades`) when Tardis L2 snapshots are unavailable.
-        Returns `(tensor_40x100, mode_tag="subbar_trade_microstructure")`.
+        """Build a 40-channel proxy from trailing OHLCV sub-bars.
+
+        This adapter has no observed bid/ask depth and does not reconstruct an
+        L2 order book. Its channels and sampling clock differ from tick-level
+        LOB inputs despite the shared (40,100) shape. Missing taker volume and
+        trade count use explicit estimates in the code, not observed trades.
+        Short histories repeat the earliest available sub-bar. The caller must
+        record this proxy mode and its actual bar duration.
         """
         L = self.seq_len
         start = max(0, decision_idx_inclusive - L + 1)

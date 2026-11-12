@@ -3,7 +3,7 @@ Programmatic Citation Verifier & Hallucination Rejector (Ch. IV Sec 4.1 & Table 
 
 Parses `[Edge ID: #EXX]` / `[Edge #EXX]` / `[Hyperedge ID: #HXX]` and optional
 `TE: 0.XXXX` values from LLM JSON rationales, cross-checks them against `H_t`,
-rejects fabricated IDs or mismatched TE scores, and accumulates exact telemetry
+rejects fabricated IDs or mismatched TE scores, and accumulates telemetry
 for Table 6.15:
   1. `인용 정합률 (Citation Match Rate)`
   2. `환각 기각률 (Hallucination Rejection Rate)`

@@ -10,6 +10,7 @@ evaluation period `2021.10~2023.12`), recording exact exchange gap counts.
 from __future__ import annotations
 
 import time
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -25,6 +26,7 @@ BINANCE_ENDPOINTS = (
     "https://api.binance.com/api/v3/klines",
     "https://api1.binance.com/api/v3/klines",
 )
+LOGGER = logging.getLogger(__name__)
 
 
 class BinanceDataFetcher:
@@ -53,7 +55,10 @@ class BinanceDataFetcher:
                 resp = self.session.get(url, params=params, timeout=self.timeout_sec)
                 if resp.status_code == 200:
                     return resp.json()
-            except Exception as exc:
+                resp.raise_for_status()
+                raise ValueError(f"Unexpected status {resp.status_code}")
+            except (requests.RequestException, ValueError) as exc:
+                LOGGER.warning("Binance download failed: symbol=%s endpoint=%s error=%s", symbol, url, exc)
                 last_err = exc
         raise RuntimeError(f"Failed to fetch Binance klines for {symbol}: {last_err}")
 

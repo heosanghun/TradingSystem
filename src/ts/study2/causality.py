@@ -1,15 +1,12 @@
-"""
-Pairwise Granger Causality & Gaussian-KDE Normalized Transfer Entropy (Ch. IV Sec 2.1–2.2).
+"""Pairwise Granger F-tests and a lag-summary KDE information-flow proxy.
 
-Implements Eqs. (IV.1)–(IV.4) & Table A.3:
-1. Bivariate VAR Granger F-test (`p = q = 24`, `p < 0.05`, Eq. IV.1)
-2. Lag-summarized Gaussian KDE Transfer Entropy (`k = 24`, Silverman bandwidth
-   `h = 1.06 * sigma_hat * n^(-1/5)`, normalized by `H(Y_t | Y_past)` into `[0, 1]`, Eqs. IV.2–IV.4).
-   Note (`구현계획_261111.md` Sec 4 #8): Direct 49-D KDE on `n = 1,440` hourly samples suffers
-   from severe curse-of-dimensionality; we project `Y_{t-1:t-24}` and `X_{t-1:t-24}` onto
-   standardized lag-block summaries `(lag_1, mean_lags_2_to_k)` so Silverman Gaussian KDE
-   remains statistically consistent and tractable across ~3,540 asset pairs.
-3. Candidate OR-rule: `(p_GC < 0.05) OR (TE_tilde > Q_0.90)`.
+The transfer-entropy implementation compresses each 24-lag history into one
+weighted summary, estimates densities in at most three dimensions, and rescales
+using max(abs(conditional entropy), TE + 1e-6, 0.5). It is an approximation, not
+an estimator of the full 49-dimensional conditional distribution. No consistency
+claim for that original estimand is made. Candidate selection remains the
+configured Granger p-value OR upper TE quantile rule; it does not correct for
+multiple comparisons and can retain many edges even for independent noise.
 """
 
 from __future__ import annotations
@@ -43,7 +40,7 @@ class CandidateEdge:
 
 def granger_var_ftest(x: np.ndarray, y: np.ndarray, lag: int = 24) -> Tuple[float, float]:
     """
-    Exact OLS SSR F-test for `X -> Y` under Eq. (IV.1):
+    OLS residual-sum-of-squares F-test for `X -> Y` under Eq. (IV.1):
       Restricted:   Y_t = c + Σ_{i=1}^p α_i Y_{t-i} + e_r
       Unrestricted: Y_t = c + Σ_{i=1}^p α_i Y_{t-i} + Σ_{j=1}^p β_j X_{t-j} + e_u
     Returns `(f_stat, p_value)`.
@@ -124,7 +121,7 @@ def _silverman_kde_entropy_1d_or_nd(samples_nd: np.ndarray, eval_sub: int = 256)
 
 def normalized_transfer_entropy_kde(x: np.ndarray, y: np.ndarray, lag: int = 24) -> float:
     """
-    Implements Eqs. (IV.2)–(IV.4):
+    Lag-summary approximation motivated by Eqs. (IV.2)–(IV.4):
       TE_{X->Y} = H(Y_t | Y_{t-1:t-k}) - H(Y_t | Y_{t-1:t-k}, X_{t-1:t-k})
       TE_tilde  = TE_{X->Y} / H(Y_t | Y_{t-1:t-k}) ∈ [0, 1]
     Uses standardized lag-summary coordinates `y_past = 0.5*y_{t-1} + 0.5*mean(y_{t-2:t-k})`
@@ -255,7 +252,12 @@ def discover_candidate_edges(
             else:
                 q, yr, ssr_r = target_fit
                 xr = lagged[i] - q @ (q.T @ lagged[i])
-                beta, _, rank, _ = lstsq(xr, yr, lapack_driver="gelsy")
+                reference_scale = np.linalg.norm(lagged[i])
+                residual_scale = np.linalg.norm(xr)
+                if residual_scale <= np.finfo(float).eps * max(xr.shape) * reference_scale:
+                    rank = -1
+                else:
+                    beta, _, rank, _ = lstsq(xr, yr, lapack_driver="gelsy")
                 if rank < gc_lag:
                     f_stat, p_val = granger_var_ftest(x, y, lag=granger_lag)
                 else:

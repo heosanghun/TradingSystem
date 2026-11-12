@@ -8,7 +8,7 @@ Implements:
   Hyperedge covering all nodes + Self-Lag Aperiodicity
 - Hyperedge Weight `w(e) ∈ [0, 1]` defined as the **mean** of constituent simple-edge weights
   (resolving Revised Thesis p. 46 **저자 확인 Box #2** consistently in both code & Table 4.1!)
-- Exact Hypergraph Random Walk Transition Matrix & Stationary Distribution (Eq. IV.6 & Prop. 4.1):
+- Hypergraph Random Walk Transition Matrix & Stationary Distribution (Eq. IV.6 & Prop. 4.1):
     `P = D_v^{-1} H W D_e^{-1} H^T`,   `π(v) = d(v) / Σ_u d(u)`
 """
 
@@ -156,7 +156,7 @@ class DynamicFinancialHypergraph:
         Implements Eq. (IV.6) & Proposition 4.1 (Zhou et al. [59]):
           P_rw = D_v^{-1} H W D_e^{-1} H^T
         With lazy self-lag `(1 - eps_self) P_rw + eps_self I` ensuring strict aperiodicity
-        while preserving the exact unique stationary distribution `π(v) = d(v) / Σ_u d(u)`.
+        while preserving the degree-proportional stationary distribution `π(v) = d(v) / Σ_u d(u)`.
         """
         n_v = len(self.nodes)
         n_e = len(self.hyperedges)

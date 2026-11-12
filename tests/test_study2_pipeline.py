@@ -38,6 +38,25 @@ def test_cached_pairwise_search_matches_reference(seed, tmp_path) -> None:
     assert pd.read_parquet(path).attrs["input_sha256"] != first_key
 
 
+def test_pairwise_discovery_handles_duplicate_and_constant_series() -> None:
+    rng = np.random.default_rng(123)
+    values = rng.normal(size=240)
+    frame = pd.DataFrame({"A": values, "duplicate": values, "B": rng.normal(size=240), "constant": 1.})
+    expected = []
+    for source in ["A", "duplicate", "B"]:
+        for target in ["A", "duplicate", "B"]:
+            if source != target:
+                f, p = granger_var_ftest(frame[source].values, frame[target].values, lag=4)
+                te = normalized_transfer_entropy_kde(frame[source].values, frame[target].values, lag=4)
+                expected.append((source, target, f, p, te))
+    cutoff = np.quantile([r[4] for r in expected], .9)
+    selected = [r for r in expected if r[3] < .05 or (r[4] > cutoff and r[4] > 0)]
+    result = discover_candidate_edges(frame, granger_lag=4, te_lag=4)
+    assert [(r.source, r.target) for r in result] == [(r[0], r[1]) for r in selected]
+    for edge, row in zip(result, selected):
+        np.testing.assert_allclose([edge.granger_f, edge.granger_p, edge.te_norm], row[2:], atol=1e-8, rtol=0)
+
+
 def test_independent_close_decision_accounting() -> None:
     from ts.baselines.independent_audit import run_audit
     rng = np.random.default_rng(11)
@@ -82,6 +101,27 @@ def test_llm_retries_cache_bypass_and_permanent_failure(monkeypatch, tmp_path) -
     assert client.telemetry["failed_calls"] == 1
 
 
+def test_llm_role_schema_is_checked_before_caching(monkeypatch, tmp_path) -> None:
+    import requests
+    import json
+    answers = [{"decision": "ACCEPT"},
+               {"decision": "ACCEPT", "confidence_score": .8, "economic_rationale": "Test rationale"}]
+    def post(*args, **kwargs):
+        value = answers.pop(0)
+        class Response:
+            def raise_for_status(self):
+                return None
+            def json(self):
+                return {"choices": [{"message": {"content": json.dumps(value)}}]}
+        return Response()
+    monkeypatch.setattr(requests, "post", post)
+    client = LLMClient(cache_db_path=tmp_path / "cache.sqlite", retry_backoff_sec=0)
+    assert client.generate_json("edge_verifier", "s", "u")["confidence_score"] == .8
+    assert client.telemetry["failed_attempts"] == 1
+    assert client.generate_json("edge_verifier", "s", "u")["confidence_score"] == .8
+    assert client.telemetry["cache_hits"] == 1
+
+
 def test_bar_checkpoint_restart_and_explicit_failures(tmp_path) -> None:
     from ts.study2.persistent_state import SQLiteJSONMap, run_checkpointed_bar
     from ts.study2.llm_client import LLMCallError
@@ -121,6 +161,147 @@ def test_bar_checkpoint_restart_and_explicit_failures(tmp_path) -> None:
     assert SQLiteJSONMap(path, "weeks")[("BTC", "ETH", "2022-W01")][0] == "ACCEPT"
 
 
+def test_teacher_script_resumes_after_interruption(monkeypatch, tmp_path) -> None:
+    import importlib.util
+    import json
+    import shutil
+    import sys
+    from pathlib import Path
+    from types import SimpleNamespace
+    from ts.config import SystemConfig
+    spec = importlib.util.spec_from_file_location("cx_study2_runner", Path("scripts/run_study2.py"))
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    monkeypatch.setattr(runner, "LLMClient", EconometricTestClient)
+    cfg = SystemConfig.from_json()
+    monkeypatch.setattr(runner.SystemConfig, "from_json", lambda *_: cfg)
+    index = pd.date_range("2022-01-01", periods=12, freq="h", tz="UTC")
+    bars = pd.DataFrame({"close": np.arange(12.) + 100}, index=index)
+    monkeypatch.setattr(runner.BinanceDataFetcher, "fetch_ohlcv", lambda *a, **k: (bars, {}))
+    monkeypatch.setattr(runner.MacroAssetFetcher, "build_aligned_60_asset_returns",
+                        lambda *a, **k: pd.DataFrame({"BTCUSDT": np.arange(12.)}, index=index))
+    monkeypatch.setattr(runner, "discover_candidate_edges_cached", lambda *a, **k: [])
+    latency = SimpleNamespace(teacher_direct=SimpleNamespace(mean_ms=1.), to_dict=lambda: {"test": True})
+    monkeypatch.setattr(runner, "benchmark_student_and_teacher_latency", lambda **k: latency)
+    first = tmp_path / "interrupted"
+    folder = first / "runs" / "study1"
+    folder.mkdir(parents=True)
+    np.savez(folder / "study1_oos_signals.npz", teacher_bar_indices=np.arange(12),
+             teacher_regimes=np.full(12, 2), teacher_ens_probs=np.full((12, 5), .2),
+             teacher_is_oos=np.ones(12, dtype=bool))
+    news = first / "news.csv"
+    pd.DataFrame({"published_at": [index[0].isoformat()],
+                  "headline": ["Test fixture headline"], "source": ["test"]}).to_csv(news, index=False)
+    uninterrupted = tmp_path / "uninterrupted"
+    shutil.copytree(first, uninterrupted)
+
+    def invoke(root):
+        monkeypatch.setattr(runner, "PROJECT_ROOT", root)
+        monkeypatch.setattr(sys, "argv", ["runner", "--news-file", str(root / "news.csv"),
+                            "--llm-backend", "openai_compat", "--diagnostic-run"])
+        runner.main()
+
+    original = runner.run_checkpointed_bar
+    def interrupted(store, key, *args, **kwargs):
+        result = original(store, key, *args, **kwargs)
+        if key == 3:
+            raise KeyboardInterrupt("test process interruption")
+        return result
+    monkeypatch.setattr(runner, "run_checkpointed_bar", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        invoke(first)
+    monkeypatch.setattr(runner, "run_checkpointed_bar", original)
+    invoke(first)
+    invoke(uninterrupted)
+    a = first / "runs/study2/diagnostic"
+    b = uninterrupted / "runs/study2/diagnostic"
+    with np.load(a / "teacher_signals.npz") as x, np.load(b / "teacher_signals.npz") as y:
+        for field in x.files:
+            np.testing.assert_array_equal(x[field], y[field])
+    assert json.loads((a / "consensus_texts.json").read_text()) == json.loads((b / "consensus_texts.json").read_text())
+    assert json.loads((a / "metrics.json").read_text())["table_6_15_study2_rows"] == json.loads(
+        (b / "metrics.json").read_text())["table_6_15_study2_rows"]
+
+
+def test_hourly_macro_alignment_and_exclusion_reporting(tmp_path) -> None:
+    from ts.data.macro_fetcher import MacroAssetFetcher
+    observed = pd.date_range("2022-01-01 08:30", periods=3, freq="h", tz="UTC")
+    fixture = pd.DataFrame({"close": [100., 110., 121.]}, index=observed)
+    fixture.attrs.update(resolution="1h", timestamp_semantics="bar_close", source="synthetic test fixture")
+    for symbol in ["a", "b"]:
+        fixture.to_parquet(tmp_path / f"{symbol}_1h.parquet")
+    daily = fixture.copy()
+    daily.attrs["resolution"] = "1d"
+    daily.to_parquet(tmp_path / "daily_1h.parquet")
+    clock = pd.date_range("2022-01-01 09:00", periods=4, freq="h", tz="UTC")
+    fetcher = MacroAssetFetcher(tmp_path)
+    first = fetcher.build_aligned_60_asset_returns(clock, crypto_symbols=[],
+                                                  macro_symbols=["A", "B", "DAILY", "MISSING"])
+    np.testing.assert_allclose(first.A, [0., np.log(1.1), np.log(1.1), 0.])
+    assert [x["symbol"] for x in fetcher.last_universe_report["included"]] == ["A", "B"]
+    assert [x["symbol"] for x in fetcher.last_universe_report["excluded"]] == ["DAILY", "MISSING"]
+    fixture.loc[observed[-1], "close"] = 999.
+    fixture.to_parquet(tmp_path / "a_1h.parquet")
+    second = fetcher.build_aligned_60_asset_returns(clock, crypto_symbols=[], macro_symbols=["A", "B"])
+    np.testing.assert_array_equal(first.A.iloc[:2], second.A.iloc[:2])
+    with pytest.raises(FileNotFoundError, match="fallback is disabled"):
+        fetcher.fetch_us_control_asset("SPY")
+
+
+def test_explicit_daily_us_controls_follow_dst(monkeypatch) -> None:
+    from ts.data.macro_fetcher import MacroAssetFetcher
+    import ts.data.macro_fetcher as module
+    daily = pd.DataFrame({"Close": [100., 101.]}, index=pd.to_datetime(["2022-03-11", "2022-03-14"]))
+    monkeypatch.setattr(module.yf, "download", lambda *a, **k: daily.copy())
+    result = MacroAssetFetcher().fetch_us_control_asset("SPY", "2022-03-01", "2022-03-20", prefer_hourly=False)
+    assert list(result.index.hour) == [21, 20]
+    assert result.attrs["resolution"] == "1d"
+
+
+def test_news_preparation_reports_coverage_and_rejects_ambiguous_times(tmp_path) -> None:
+    import runpy
+    import json
+    prepare = runpy.run_path("data/collect_inputs.py")["prepare_news"]
+    source = tmp_path / "news.csv"
+    output = tmp_path / "news.parquet"
+    pd.DataFrame({"published_at": ["2022-01-01T00:00:00Z", "2022-01-02T00:00:00Z"],
+                  "headline": ["Test news item", "Test news item"], "source": ["fixture", "fixture"]}).to_csv(source, index=False)
+    report = prepare(source, output, "test://fixture", "test data", "2022-01-01", "2022-01-31")
+    assert report["deduplicated_rows"] == 1
+    assert report["monthly_counts"] == {"2022-01": 1}
+    missing_output = tmp_path / "missing.parquet"
+    with pytest.raises(ValueError, match="empty months"):
+        prepare(source, missing_output, "test://fixture", "test data", "2022-01-01", "2022-02-28")
+    assert not missing_output.exists()
+    assert json.loads(missing_output.with_suffix(".coverage.json").read_text())["empty_months"] == ["2022-02"]
+    frame = pd.read_csv(source)
+    frame["published_at"] = ["2022-01-01", "2022-01-02"]
+    frame.to_csv(source, index=False)
+    with pytest.raises(ValueError, match="timezone"):
+        prepare(source, output, "test://fixture", "test data")
+
+
+def test_snapshot_trade_adapter_uses_only_prior_receipts() -> None:
+    from ts.data.tardis_adapter import snapshot_trade_features
+    book = {"local_timestamp": [100, 200, 300]}
+    for level in range(10):
+        book[f"bids[{level}].price"] = [100-level] * 3
+        book[f"asks[{level}].price"] = [101+level] * 3
+        book[f"bids[{level}].amount"] = [10.] * 3
+        book[f"asks[{level}].amount"] = [10.] * 3
+    trades = pd.DataFrame({"local_timestamp": [50, 100, 150, 250, 350],
+                           "amount": [1., 2., 3., 4., 5.],
+                           "side": ["buy", "sell", "buy", "sell", "buy"]})
+    _, features = snapshot_trade_features(pd.DataFrame(book), trades)
+    # At 100, the trade timestamped exactly 100 is excluded.
+    np.testing.assert_allclose(features[:, 30], np.log1p([1., 5., 4.]))
+    np.testing.assert_allclose(features[:, 31], [1., .2, -1.])
+    changed = trades.copy()
+    changed.loc[changed.local_timestamp >= 250, "amount"] *= 100
+    _, later = snapshot_trade_features(pd.DataFrame(book), changed)
+    np.testing.assert_array_equal(features[:2], later[:2])
+
+
 def test_granger_and_kde_transfer_entropy_detect_planted_lead_lag() -> None:
     rng = np.random.default_rng(42)
     n = 300
@@ -156,7 +337,7 @@ def test_hypergraph_stationary_distribution_and_citation_verification() -> None:
     cands = discover_candidate_edges(df, granger_lag=4, te_lag=4)
     assert len(cands) >= 2
 
-    llm = LLMClient(backend="deterministic_econometric")
+    llm = EconometricTestClient()
     hg = build_daily_hypergraph(
         nodes=list(df.columns),
         candidates=cands,
@@ -203,3 +384,82 @@ def test_hypergraph_stationary_distribution_and_citation_verification() -> None:
         strip_evidence=True,
     )
     assert -1.0 <= out_stripped.w_final <= 1.0
+
+
+class EconometricTestClient(LLMClient):
+    """Deterministic teacher fixture; never used by production entry points."""
+    def __init__(self, backend="deterministic_econometric", **kwargs):
+        super().__init__(backend="openai_compat", **kwargs)
+        self.backend = "deterministic_econometric"
+        self.is_simulated_llm = True
+
+    def _generate_json_once(self, role, system_prompt, user_prompt, retry_attempt=0,
+                            context_hint=None, use_cache=True):
+        return self._deterministic_econometric_response(role, context_hint or {})
+
+    @staticmethod
+    def _deterministic_econometric_response(role: str, ctx: dict) -> dict:
+        """
+        Deterministic, citation-faithful econometric rule generator used ONLY in automated
+        tests (`backend='deterministic_econometric'`).
+        """
+        if role == "edge_verifier":
+            te = float(ctx.get("te_score", 0.0))
+            p_gc = float(ctx.get("granger_p", 1.0))
+            accept = (te >= 0.02) or (p_gc < 0.05)
+            conf = float(min(0.95, max(0.35, 0.5 * te + (0.4 if p_gc < 0.05 else 0.1))))
+            return {
+                "decision": "ACCEPT" if accept else "REJECT",
+                "confidence_score": round(conf, 4),
+                "economic_rationale": (
+                    f"Cross-asset transmission from {ctx.get('source', 'X')} to {ctx.get('target', 'Y')} "
+                    f"is supported by statistical information flow. Liquidity spillover channel is plausible."
+                ),
+            }
+
+        if role == "alpha_analyst":
+            pos_edges = ctx.get("pos_edges", [])
+            ens_w = float(ctx.get("study1_target_weight", 0.0))
+            asset_w = float(min(1.0, max(0.0, 0.5 + 0.5 * ens_w)))
+            if pos_edges:
+                e0 = pos_edges[0]
+                cite = f"[Edge ID: #{e0['edge_id']}, TE: {e0['te_norm']:.4f}]"
+            else:
+                cite = "No active positive edge available."
+            return {
+                "Proposed Portfolio Weights": {"Asset": round(asset_w, 4), "Cash": round(1.0 - asset_w, 4)},
+                "Grounded Rationale": f"{cite} indicates constructive momentum transmission aligned with ensemble baseline.",
+            }
+
+        if role == "risk_manager":
+            neg_edges = ctx.get("neg_edges", [])
+            ens_w = float(ctx.get("study1_target_weight", 0.0))
+            if neg_edges:
+                e0 = neg_edges[0]
+                max_w = float(e0.get("weight", 0.0))
+                cite = f"[Edge ID: #{e0['edge_id']}, TE: {e0['te_norm']:.4f}]"
+                if max_w > 0.65:
+                    dec = "STRONG REJECT"
+                    short_w = min(1.0, round(max_w, 4))
+                    asset_w = 0.0
+                elif max_w > 0.35:
+                    dec = "MODIFY"
+                    short_w = round(0.5 * max_w, 4)
+                    asset_w = 0.0
+                else:
+                    dec = "AGREE"
+                    short_w = 0.0
+                    asset_w = max(0.0, round(ens_w, 4))
+            else:
+                dec = "AGREE"
+                short_w = 0.0
+                asset_w = max(0.0, round(ens_w, 4))
+                cite = "No active tail-risk edge triggered."
+            cash_w = max(0.0, round(1.0 - asset_w - short_w, 4))
+            return {
+                "Rebuttal Decision": dec,
+                "Revised Portfolio Weights": {"Asset": asset_w, "Cash": cash_w, "Short": short_w},
+                "Risk Rationale": f"{cite} governs downside contagion assessment and drawdown protection.",
+            }
+
+        raise ValueError(f"Unknown deterministic role: {role}")
