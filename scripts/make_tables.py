@@ -54,6 +54,15 @@ REQUIRED_27_BLANK_IDS: Tuple[Tuple[str, str, str], ...] = (
 )
 
 
+# Stages of one teacher decision, matching the description under Table 6.14.
+TEACHER_LATENCY_STAGES: Tuple[Tuple[str, str], ...] = (
+    ("뉴스 검색", "NEWS"),
+    ("전이 엔트로피 재계산", "TE"),
+    ("하이퍼그래프 갱신", "GRAPH"),
+    ("근거 기반 토론", "DEBATE"),
+)
+
+
 def _fmt(rows: Dict[str, Dict[str, str]], nid: str, suffix: str = "") -> str:
     if nid not in rows:
         return "측정 대기"
@@ -76,6 +85,9 @@ def compile_markdown_tables(ledger_rows: Dict[str, Dict[str, str]]) -> Tuple[str
             f"{_fmt(ledger_rows, f'T6.2_{k}_MAX')} | {_fmt(ledger_rows, f'T6.2_{k}_KURT')} |"
         )
     lines.append("")
+    if any(f"T6.2_{k}_N" not in ledger_rows for k in ("SPY", "GLD")):
+        lines.append("주: 이 표는 1시간 봉 기준이다. SPY와 GLD는 1시간 봉을 확보한 경우에만 기록한다.")
+        lines.append("")
 
     # Table 6.6 & Table 6.7
     for ph, title in [(1, "표 6.6. Phase 1 성과 비교 (고정 비용 0.05%)"), (2, "표 6.7. Phase 2 성과 비교 (ATR 동적 비용)")]:
@@ -118,7 +130,9 @@ def compile_markdown_tables(ledger_rows: Dict[str, Dict[str, str]]) -> Tuple[str
     lines.append("| 모달리티 | 상대 기여도 (%) |")
     lines.append("| :--- | :---: |")
     lines.append(f"| 시각 (차트 이미지, ResNet-18+CBAM) | {_fmt(ledger_rows, 'T6.9_SHAP_VISUAL_PCT', '%')} |")
-    lines.append(f"| 텍스트(뉴스 감성) + 기술 지표 합계 | {_fmt(ledger_rows, 'T6.9_SHAP_TECH_SENTI_PCT', '%')} |")
+    lines.append(f"| 기술 지표 | {_fmt(ledger_rows, 'T6.9_SHAP_TECH_PCT', '%')} |")
+    lines.append(f"| 텍스트 (뉴스 감성) | {_fmt(ledger_rows, 'T6.9_SHAP_SENTIMENT_PCT', '%')} |")
+    lines.append(f"| 텍스트 + 기술 지표 합계 | {_fmt(ledger_rows, 'T6.9_SHAP_TECH_SENTI_PCT', '%')} |")
     lines.append("")
 
     # Table 6.10
@@ -169,12 +183,17 @@ def compile_markdown_tables(ledger_rows: Dict[str, Dict[str, str]]) -> Tuple[str
     lines.append("")
 
     # Table 6.14
-    lines.append("## 표 6.14. 실행 지연 비교 (10,000회 측정)\n")
+    lines.append("## 표 6.14. 실행 지연 비교\n")
     lines.append("| 실행 경로 | 평균 지연 (ms) | 중앙값 (ms) | P99 (ms) |")
     lines.append("| :--- | :---: | :---: | :---: |")
     lines.append(
-        f"| 교사 직접 추론 (System 2) | {_fmt(ledger_rows, 'T6.14_TEACHER_MEAN_MS', ' ms')} | - | - |"
+        f"| 교사 직접 추론 (System 2) | {_fmt(ledger_rows, 'T6.14_TEACHER_MEAN_MS', ' ms')} | "
+        f"{_fmt(ledger_rows, 'T6.14_TEACHER_MEDIAN_MS', ' ms')} | {_fmt(ledger_rows, 'T6.14_TEACHER_P99_MS', ' ms')} |"
     )
+    for stage_label, stage_key in TEACHER_LATENCY_STAGES:
+        lines.append(
+            f"| 교사 구간: {stage_label} | {_fmt(ledger_rows, f'T6.14_TEACHER_{stage_key}_MEAN_MS', ' ms')} | - | - |"
+        )
     lines.append(
         f"| 학생 단독 실행 (System 1 `Student1DCNN`) | {_fmt(ledger_rows, 'T6.14_STUDENT_MEAN_MS', ' ms')} | "
         f"{_fmt(ledger_rows, 'T6.14_STUDENT_MEDIAN_MS', ' ms')} | {_fmt(ledger_rows, 'T6.14_STUDENT_P99_MS', ' ms')} |\n"
@@ -188,7 +207,8 @@ def compile_markdown_tables(ledger_rows: Dict[str, Dict[str, str]]) -> Tuple[str
     lines.append(f"| 환각 기각률 | {_fmt(ledger_rows, 'T6.15_HALLUCINATION_REJECT_PCT', '%')} |")
     lines.append(
         f"| 모달 기여도 (SHAP) | 시각 {_fmt(ledger_rows, 'T6.9_SHAP_VISUAL_PCT', '%')}, "
-        f"텍스트+지표 {_fmt(ledger_rows, 'T6.9_SHAP_TECH_SENTI_PCT', '%')} |"
+        f"기술 지표 {_fmt(ledger_rows, 'T6.9_SHAP_TECH_PCT', '%')}, "
+        f"텍스트 {_fmt(ledger_rows, 'T6.9_SHAP_SENTIMENT_PCT', '%')} |"
     )
     lines.append(f"| 교사-학생 행동 일치율 | {_fmt(ledger_rows, 'T6.15_TEACHER_STUDENT_AGREE_PCT', '%')} |")
     lines.append(f"| 근거 제거 시 결정 변화율 | {_fmt(ledger_rows, 'T6.15_EVIDENCE_FLIP_PCT', '%')} |\n")

@@ -150,3 +150,31 @@ def test_ledger_routes_non_final_runs_to_provisional(tmp_path, monkeypatch) -> N
     assert "llm_simulated=True" in prov["B"]["provisional_reasons"]
     assert "not declared" in prov["C"]["provisional_reasons"]
     assert "TS_SMOKE_RUN" in prov["E"]["provisional_reasons"]
+
+
+def test_staged_latency_benchmark_times_each_stage_and_rejects_repeats():
+    import time as _time
+
+    import pytest
+
+    from ts.eval.latency_benchmark import benchmark_staged_pipeline
+
+    def slow(item, carry):
+        _time.sleep(0.02)
+        return item * 2
+
+    def fast(item, carry):
+        assert carry["slow"] == item * 2
+        if item == 3:
+            raise RuntimeError("stage failure")
+        return None
+
+    rep = benchmark_staged_pipeline({"slow": slow, "fast": fast}, [1, 2, 3, 4])
+    assert rep.n_failed_items == 1
+    assert rep.total.n_runs == 3 and rep.stages["slow"].n_runs == 3
+    assert rep.stages["slow"].mean_ms >= 15.0
+    assert rep.stages["fast"].mean_ms < rep.stages["slow"].mean_ms
+    assert abs(rep.total.mean_ms - rep.stages["slow"].mean_ms - rep.stages["fast"].mean_ms) < 1e-6
+
+    with pytest.raises(ValueError):
+        benchmark_staged_pipeline({"slow": slow}, [1, 1])
