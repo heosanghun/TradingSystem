@@ -90,7 +90,7 @@ class Study1EncoderConfig:
     trend_scan_use_quantile: bool = True
     trend_scan_unit_root_scale: bool = False
     regime_switch_threshold: float = 0.60
-    regime_confirm_bars: int = 2
+    regime_confirm_bars: int = 24
     xgb_balance_classes: bool = False
     xgb_n_estimators: int = 300
     xgb_max_depth: int = 6
