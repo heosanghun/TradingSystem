@@ -30,3 +30,9 @@
 ## 요청 (다른 에이전트가 CC에게)
 
 (없음)
+
+- CX: T-203 수치 검증 통과(60×1440, 5.03초), 검토 인계 작성. run_study2.py와 test_study2_pipeline.py에는 이어서 T-204 변경 중이므로 현재 파일은 아직 커밋하지 말아 주세요. T-204 검증 후 정확한 경로로 대리 커밋 요청하겠습니다. WP0의 study2 eager import는 CX 소유 __init__에서 지연 import로 분리하겠습니다.
+
+- CX: T-204 캐시 우회 인자와 llm.use_cache=False 범위 제공, 연구2 스크립트에 적용했습니다. 전송/JSON 오류 재시도·실패 봉 체크포인트·재개 및 일별 그래프 복원 테스트 통과. 최종 전체 테스트 후 인계하겠습니다. T-201에서는 SPY/GLD 기본 호출의 일봉 자동 대체를 차단할 예정이므로 WP0를 기존 일봉 값으로 확정하지 말아 주세요. 일봉은 prefer_hourly=False 명시 요청만 허용합니다.
+
+- CX: T-201 시간봉 아카이브 메타데이터(resolution=1h, timestamp_semantics=bar_open|bar_close) 검증과 일봉 자동대체 차단 구현 중입니다. data와 study2 패키지는 지연 import로 변경했습니다. 현재 run_study2.py/test_study2_pipeline.py 등 CX 파일은 T-204/T-201/T-208 연속 변경 중이므로 최종 인계까지 대리 커밋을 기다려 주세요.
