@@ -1,0 +1,235 @@
+{
+  "script_path": "scripts/calibrate_study1_rollouts.py",
+  "measured_code_state": "94ccd6c (Fold 1 sub-train/val calibration prior to committing default_rollouts_per_fold=64)",
+  "sub_train_window_utc": [
+    "2020-10-01 00:00:00+00:00",
+    "2021-07-31 23:00:00+00:00"
+  ],
+  "val_window_utc": [
+    "2021-08-01 00:00:00+00:00",
+    "2021-09-30 23:00:00+00:00"
+  ],
+  "test_fold_accessed": false,
+  "selection_criterion_pre_registered": false,
+  "uniform_entropy_ln5": 1.6094,
+  "random_baseline_val_turnover": 0.8033,
+  "random_baseline_val_sharpe_mean": -26.833,
+  "sub_train_bars": 7283,
+  "val_bars": 1458,
+  "sample_expert_trajectory_r128_fold1_regime2_seed1200": [
+    {
+      "rollout": 1,
+      "mean_reward": -0.002589,
+      "policy_entropy": 1.47195,
+      "mean_turnover": 0.69621,
+      "greedy_mean_turnover": 0.03762,
+      "value_loss": 0.128696,
+      "actor_loss": -0.001767,
+      "greedy_action_dist": [0.0301, 0.3661, 0.6015, 0.0022, 0.0001]
+    },
+    {
+      "rollout": 8,
+      "mean_reward": -0.001668,
+      "policy_entropy": 1.12794,
+      "mean_turnover": 0.44686,
+      "greedy_mean_turnover": 0.02355,
+      "value_loss": 0.000451,
+      "actor_loss": -0.010267,
+      "greedy_action_dist": [0.0012, 0.3637, 0.6161, 0.0189, 0.0]
+    },
+    {
+      "rollout": 32,
+      "mean_reward": -0.00012,
+      "policy_entropy": 0.12019,
+      "mean_turnover": 0.03975,
+      "greedy_mean_turnover": 0.01902,
+      "value_loss": 0.000138,
+      "actor_loss": 0.022822,
+      "greedy_action_dist": [0.003, 0.3733, 0.6228, 0.0008, 0.0]
+    },
+    {
+      "rollout": 64,
+      "mean_reward": -6.2e-05,
+      "policy_entropy": 0.07132,
+      "mean_turnover": 0.03494,
+      "greedy_mean_turnover": 0.02135,
+      "value_loss": 0.000126,
+      "actor_loss": 0.005448,
+      "greedy_action_dist": [0.003, 0.3746, 0.6193, 0.0, 0.0032]
+    },
+    {
+      "rollout": 128,
+      "mean_reward": 2.1e-05,
+      "policy_entropy": 0.04664,
+      "mean_turnover": 0.02629,
+      "greedy_mean_turnover": 0.02245,
+      "value_loss": 9.5e-05,
+      "actor_loss": -0.001871,
+      "greedy_action_dist": [0.0045, 0.3672, 0.6268, 0.0001, 0.0014]
+    }
+  ],
+  "grid_results": [
+    {
+      "rollouts": 8,
+      "train_15experts_sec": 19.2,
+      "train_final_entropy_mean": 1.2802,
+      "train_final_sampled_turnover": 0.587,
+      "train_final_greedy_turnover": 0.0587,
+      "train_final_value_loss": 3.59032,
+      "train_regime_rewards": {
+        "0": -0.00096,
+        "1": -0.18691,
+        "2": -0.00216
+      },
+      "val_ens_policy_entropy": 1.4113,
+      "val_action_dist": [
+        0.0,
+        0.0466,
+        0.0,
+        0.5466,
+        0.4067
+      ],
+      "val_mean_turnover": 0.1248,
+      "val_regime_reward_mean": 0.02485,
+      "val_mean_net_ret_bps": -2.9388,
+      "val_cum_return_pct": -36.12,
+      "val_sharpe": -5.295,
+      "val_mdd_pct": -44.45
+    },
+    {
+      "rollouts": 32,
+      "train_15experts_sec": 71.71,
+      "train_final_entropy_mean": 0.5518,
+      "train_final_sampled_turnover": 0.2462,
+      "train_final_greedy_turnover": 0.0857,
+      "train_final_value_loss": 4.48336,
+      "train_regime_rewards": {
+        "0": -8e-05,
+        "1": -0.08811,
+        "2": -0.00038
+      },
+      "val_ens_policy_entropy": 1.1121,
+      "val_action_dist": [
+        0.0281,
+        0.1447,
+        0.0137,
+        0.4088,
+        0.4047
+      ],
+      "val_mean_turnover": 0.2785,
+      "val_regime_reward_mean": -0.02928,
+      "val_mean_net_ret_bps": -6.213,
+      "val_cum_return_pct": -60.46,
+      "val_sharpe": -10.68,
+      "val_mdd_pct": -64.04
+    },
+    {
+      "rollouts": 64,
+      "train_15experts_sec": 142.06,
+      "train_final_entropy_mean": 0.249,
+      "train_final_sampled_turnover": 0.1286,
+      "train_final_greedy_turnover": 0.0669,
+      "train_final_value_loss": 4.49778,
+      "train_regime_rewards": {
+        "0": 0.00012,
+        "1": 0.03797,
+        "2": -0.00016
+      },
+      "val_ens_policy_entropy": 0.848,
+      "val_action_dist": [
+        0.0508,
+        0.0021,
+        0.0,
+        0.5501,
+        0.3971
+      ],
+      "val_mean_turnover": 0.1811,
+      "val_regime_reward_mean": 0.02868,
+      "val_mean_net_ret_bps": -4.2028,
+      "val_cum_return_pct": -46.97,
+      "val_sharpe": -7.254,
+      "val_mdd_pct": -52.12
+    },
+    {
+      "rollouts": 128,
+      "train_15experts_sec": 283.95,
+      "train_final_entropy_mean": 0.1615,
+      "train_final_sampled_turnover": 0.114,
+      "train_final_greedy_turnover": 0.0841,
+      "train_final_value_loss": 3.32215,
+      "train_regime_rewards": {
+        "0": 0.00024,
+        "1": 0.0885,
+        "2": 1e-05
+      },
+      "val_ens_policy_entropy": 0.749,
+      "val_action_dist": [
+        0.1125,
+        0.0556,
+        0.0117,
+        0.4342,
+        0.3861
+      ],
+      "val_mean_turnover": 0.2888,
+      "val_regime_reward_mean": -0.02126,
+      "val_mean_net_ret_bps": -5.8584,
+      "val_cum_return_pct": -58.5,
+      "val_sharpe": -9.325,
+      "val_mdd_pct": -61.08
+    },
+    {
+      "rollouts": 256,
+      "train_15experts_sec": 624.15,
+      "train_final_entropy_mean": 0.0727,
+      "train_final_sampled_turnover": 0.0863,
+      "train_final_greedy_turnover": 0.0757,
+      "train_final_value_loss": 1.44522,
+      "train_regime_rewards": {
+        "0": 0.00039,
+        "1": 0.12436,
+        "2": 8e-05
+      },
+      "val_ens_policy_entropy": 0.8585,
+      "val_action_dist": [
+        0.0665,
+        0.1214,
+        0.0014,
+        0.4266,
+        0.3841
+      ],
+      "val_mean_turnover": 0.2864,
+      "val_regime_reward_mean": -0.02955,
+      "val_mean_net_ret_bps": -6.5029,
+      "val_cum_return_pct": -62.11,
+      "val_sharpe": -11.098,
+      "val_mdd_pct": -64.68
+    },
+    {
+      "rollouts": 512,
+      "train_15experts_sec": 1217.79,
+      "train_final_entropy_mean": 0.0646,
+      "train_final_sampled_turnover": 0.1132,
+      "train_final_greedy_turnover": 0.1051,
+      "train_final_value_loss": 1.38513,
+      "train_regime_rewards": {
+        "0": 0.00056,
+        "1": 0.23082,
+        "2": 0.00024
+      },
+      "val_ens_policy_entropy": 0.6989,
+      "val_action_dist": [
+        0.251,
+        0.0021,
+        0.0048,
+        0.3573,
+        0.3848
+      ],
+      "val_mean_turnover": 0.4273,
+      "val_regime_reward_mean": -0.05161,
+      "val_mean_net_ret_bps": -9.2896,
+      "val_cum_return_pct": -74.96,
+      "val_sharpe": -13.598,
+      "val_mdd_pct": -77.29
+    }
+  ]
+}
