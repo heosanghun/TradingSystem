@@ -60,6 +60,8 @@ def main() -> None:
                         help="Distinct out-of-sample bars used for the teacher latency measurement.")
     parser.add_argument("--ollama-num-ctx", type=int, default=4096)
     parser.add_argument("--llm-timeout-sec", type=int, default=120)
+    parser.add_argument("--gpu-temp-limit", type=int, default=0,
+                        help="Pause before LLM requests while the GPU is at or above this temperature in C (0 = off).")
     parser.add_argument("--llm-request-attempts", type=int, default=8,
                         help="Samples drawn for one call before it counts as failed (cut-off or malformed JSON).")
     parser.add_argument("--max-bars", type=int, default=0,
@@ -152,6 +154,7 @@ def main() -> None:
         cache_db_path=cache_dir / "llm_cache.sqlite",
         timeout_sec=args.llm_timeout_sec,
         max_request_attempts=args.llm_request_attempts,
+        gpu_temp_limit_c=args.gpu_temp_limit or None,
         ollama_num_ctx=args.ollama_num_ctx,
     )
     verifier = CitationVerifier(te_tolerance=cfg.study2.te_citation_tolerance)
@@ -330,6 +333,9 @@ def main() -> None:
 
     latency_failure = None
     lat_report = None
+    # The cooling pause is not part of a decision, so it is switched off for the timing.
+    temp_limit_during_run = llm.gpu_temp_limit_c
+    llm.gpu_temp_limit_c = None
     previous_cache_mode = llm.use_cache
     stats_before_latency = verifier.stats
     verifier.stats = CitationVerificationStats()   # keep Table 6.15 counts free of benchmark calls
@@ -347,6 +353,7 @@ def main() -> None:
             latency_failure = "fewer than two debated out-of-sample bars"
     finally:
         llm.use_cache = previous_cache_mode
+        llm.gpu_temp_limit_c = temp_limit_during_run
         verifier.stats = stats_before_latency
 
     verification_days = [day_store[d].get("verification_counts") for d in day_store]

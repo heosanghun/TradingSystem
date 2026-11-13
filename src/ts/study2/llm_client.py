@@ -24,6 +24,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import subprocess
+
 import requests
 
 
@@ -115,6 +117,7 @@ class LLMClient:
         retry_backoff_sec: float = 1.0,
         ollama_num_ctx: int = 4096,
         skip_thinking: bool = True,
+        gpu_temp_limit_c: Optional[int] = None,
     ) -> None:
         self.backend = backend
         self.model_name = model_name
@@ -130,6 +133,9 @@ class LLMClient:
         # weights and spills layers to the CPU. The longest project prompt is under 2k tokens.
         self.ollama_num_ctx = int(ollama_num_ctx)
         self.skip_thinking = bool(skip_thinking)
+        # Optional hardware protection for long runs on a laptop: before a request, wait while
+        # the GPU is at or above this temperature. It only delays requests; answers are unaffected.
+        self.gpu_temp_limit_c = gpu_temp_limit_c
         self.telemetry = Counter()
         self.use_cache = True
         self.is_simulated_llm = backend == "deterministic_econometric"
@@ -138,6 +144,25 @@ class LLMClient:
         if self.cache_db_path is not None:
             self.cache_db_path.parent.mkdir(parents=True, exist_ok=True)
             self._init_db()
+
+    def _wait_for_gpu_to_cool(self) -> None:
+        if self.gpu_temp_limit_c is None:
+            return
+        waited = 0.0
+        while waited < 300.0:
+            try:
+                out = subprocess.run(["nvidia-smi", "--query-gpu=temperature.gpu", "--format=csv,noheader,nounits"],
+                                     capture_output=True, text=True, timeout=10).stdout
+                temp = int(out.strip().splitlines()[0])
+            except Exception:
+                return  # no reading available: do not block the run
+            # Resume a few degrees below the limit so the run does not oscillate at the limit.
+            if temp < self.gpu_temp_limit_c - (4 if waited > 0 else 0):
+                break
+            time.sleep(5.0)
+            waited += 5.0
+        if waited:
+            self.telemetry["gpu_cooldown_ms"] += int(waited * 1000)
 
     def _init_db(self) -> None:
         assert self.cache_db_path is not None
@@ -274,6 +299,7 @@ class LLMClient:
             ]
             if self.skip_thinking:
                 messages.append({"role": "assistant", "content": EMPTY_THINK_PREFILL})
+            self._wait_for_gpu_to_cool()
             t_call = time.perf_counter()
             resp = requests.post(
                 self.endpoint_url,
