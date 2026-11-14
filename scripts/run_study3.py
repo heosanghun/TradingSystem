@@ -32,6 +32,7 @@ from ts.ledger import SMOKE_ENV_VAR, NumberLedger, RunContext
 from ts.study1.ppo_expert import ACTION_WEIGHTS
 from ts.study2.debate import map_continuous_weight_to_discrete_action
 from ts.study3.distillation import StudentDistillationTrainer, verify_property_5_1_orthogonality
+from ts.study3.student_model import apply_action_confidence_gate
 from ts.study3.teacher_signal import FinBERTReasoningEncoder, build_aligned_distillation_dataset
 
 
@@ -296,7 +297,10 @@ def main() -> None:
 
     epochs = int(args.epochs) if args.epochs is not None else int(cfg.study3.epochs)
     lambda3_grid = list(cfg.evaluation.sensitivity_lambda3_grid)
-    oos_actions_by_l3: Dict[float, List[np.ndarray]] = {l3: [] for l3 in lambda3_grid}
+    # Action probabilities per test bar. The executed action is derived from them after the
+    # folds are joined, so that the confidence gate (D-18) carries the held action across folds.
+    oos_probs_by_l3: Dict[float, List[np.ndarray]] = {l3: [] for l3 in lambda3_grid}
+    action_theta = float(cfg.study3.action_confidence_threshold)
     oos_hidden_primary_list: List[np.ndarray] = []
     oos_indices_list: List[np.ndarray] = []
     prop_5_1_checks: List[Dict[str, float]] = []
@@ -334,8 +338,10 @@ def main() -> None:
                 device=device,
             )
             student, _ = trainer.fit(pack)
-            acts_t, _ = student.act_online(te_lob_t)
-            oos_actions_by_l3[l3].append(acts_t.cpu().numpy())
+            student.eval()
+            with torch.no_grad():
+                _, probs_t = student.act_online(te_lob_t)
+            oos_probs_by_l3[l3].append(probs_t.cpu().numpy())
 
             if abs(l3 - cfg.study3.lambda_reasoning) < 1e-6:
                 student.eval()
@@ -360,11 +366,13 @@ def main() -> None:
 
     table_6_11 = {}
     for l3 in lambda3_grid:
-        acts = np.concatenate(oos_actions_by_l3[l3])
+        acts = apply_action_confidence_gate(np.concatenate(oos_probs_by_l3[l3]), action_theta)
         res = bt.run_decisions(eval_df, ACTION_WEIGHTS[acts], phase=2)
         table_6_11[f"{l3:.1f}"] = res.summary.to_dict()
 
-    primary_acts = np.concatenate(oos_actions_by_l3[cfg.study3.lambda_reasoning])
+    primary_probs = np.concatenate(oos_probs_by_l3[cfg.study3.lambda_reasoning])
+    primary_acts = apply_action_confidence_gate(primary_probs, action_theta)
+    ungated_acts = np.argmax(primary_probs, axis=1)
     primary_weights = ACTION_WEIGHTS[primary_acts]
     res_p2 = bt.run_decisions(eval_df, primary_weights, phase=2)
 
@@ -382,7 +390,7 @@ def main() -> None:
 
     # Phase 1 Proposed Model (5-fold CV over evaluation period with fixed 0.05% fee, Table 6.6)
     p1_splits = generate_phase1_kfold_splits(cat_te_idx, n_splits=cfg.evaluation.phase1_kfold_splits)
-    p1_pred_weights = np.zeros(len(cat_te_idx), dtype=np.float64)
+    p1_probs = np.zeros((len(cat_te_idx), len(ACTION_WEIGHTS)), dtype=np.float64)
     idx_to_local = {int(g_i): loc_i for loc_i, g_i in enumerate(cat_te_idx)}
     p1_costs_all = compute_phase1_cost_rates(len(df_all), fee_rate=cfg.evaluation.phase1_fixed_fee_rate)
 
@@ -411,10 +419,15 @@ def main() -> None:
             device=device,
         )
         s_p1, _ = p1_trainer.fit(p1_pack)
-        acts_p1, _ = s_p1.act_online(torch.as_tensor(online_wins_all[p1_te], dtype=torch.float32, device=device))
-        acts_p1_np = acts_p1.cpu().numpy()
+        s_p1.eval()
+        with torch.no_grad():
+            _, probs_p1 = s_p1.act_online(torch.as_tensor(online_wins_all[p1_te], dtype=torch.float32, device=device))
+        probs_p1_np = probs_p1.cpu().numpy()
         for k_pos, g_idx in enumerate(p1_te):
-            p1_pred_weights[idx_to_local[int(g_idx)]] = ACTION_WEIGHTS[acts_p1_np[k_pos]]
+            p1_probs[idx_to_local[int(g_idx)]] = probs_p1_np[k_pos]
+
+    # Same execution rule as Phase 2, applied in time order over the evaluation period.
+    p1_pred_weights = ACTION_WEIGHTS[apply_action_confidence_gate(p1_probs, action_theta)]
 
     res_p1 = bt.run_decisions(eval_df, p1_pred_weights, phase=1)
 
@@ -437,6 +450,9 @@ def main() -> None:
     payload = {
         "config_sha256": cfg.config_sha256,
         "lob_input_mode": lob_mode,
+        "action_confidence_threshold": action_theta,
+        "share_of_bars_where_gate_changed_action_pct": float(np.mean(primary_acts != ungated_acts)) * 100.0,
+        "mean_top_action_probability": float(np.mean(primary_probs.max(axis=1))),
         "teacher_signals_present": teacher_present,
         "llm_simulated": llm_simulated,
         "property_5_1_orthogonality": prop_5_1_checks[0] if prop_5_1_checks else {},
