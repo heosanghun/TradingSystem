@@ -32,10 +32,14 @@ from ts.study1.regime_labeling import SMARegimeLabeler, TrendScanningLabeler
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Baselines, Crisis Windows, and Ledoit-Wolf Significance.")
     parser.add_argument("--config", type=str, default=str(DEFAULT_CONFIG_PATH))
-    parser.add_argument("--ppo-rollouts", type=int, default=8)
+    parser.add_argument("--ppo-rollouts", type=int, default=None,
+                        help="PPO rollouts per fold (default: the Study 1 budget from the config).")
     args = parser.parse_args()
 
     cfg = SystemConfig.from_json(args.config)
+    default_rollouts = int(cfg.study1_ppo.default_rollouts_per_fold)
+    if args.ppo_rollouts is None:
+        args.ppo_rollouts = default_rollouts
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     cache_dir = PROJECT_ROOT / "data" / "cache"
     out_dir = PROJECT_ROOT / "runs" / "baselines"
@@ -181,6 +185,7 @@ def main() -> None:
 
     payload = {
         "config_sha256": cfg.config_sha256,
+        "ppo_rollouts_per_fold": int(args.ppo_rollouts),
         "phase1_table_6_6": {k: v.summary.to_dict() for k, v in res_p1.items()},
         "phase2_table_6_7": {k: v.summary.to_dict() for k, v in res_p2.items()},
         "crisis_static_ensemble_table_6_8": crisis_static,
@@ -188,11 +193,10 @@ def main() -> None:
     }
     (out_dir / "metrics.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
+    # The comparison models get the same PPO budget as the Study 1 experts
+    # (`default_rollouts_per_fold`). A smaller budget marks the run as not final.
     ledger = NumberLedger(run_context=RunContext(stage="baselines", flags={
-        "quick_verify": False, "reduced_training_budget": True}))
-    # T-102 has not yet established a converged full-training budget. Until that
-    # budget is approved, these comparisons remain provisional regardless of the
-    # CLI rollout count. Do not infer convergence from an arbitrary number.
+        "quick_verify": False, "reduced_training_budget": bool(args.ppo_rollouts < default_rollouts)}))
     rec_kw = dict(script_path=script_rel, config_sha256=cfg.config_sha256, run_log_path=log_path)
 
     for ph_num, res_map in [(1, res_p1), (2, res_p2)]:
