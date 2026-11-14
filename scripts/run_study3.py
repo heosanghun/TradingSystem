@@ -90,6 +90,10 @@ def _build_bar_lob_windows(
     return per_bar_train, online_test, mode_tag
 
 
+# Fold whose student encodes the whole 2022-2023 period for the latent-space figure.
+LATENT_FIGURE_FOLD_ID = 2
+
+
 def _save_student_oos_hidden(path: Path, bar_index: pd.DatetimeIndex, hidden: np.ndarray) -> None:
     """
     Save out-of-sample `Student1DCNN.encode_hidden` vectors (`(N, 128)`) alongside bar open
@@ -351,6 +355,23 @@ def main() -> None:
                         for s in range(0, len(te_lob_t), 512)
                     ]
                     oos_hidden_primary_list.append(np.concatenate(hid_chunks, axis=0))
+                    # One model for the latent-space figure. Hidden vectors of different folds
+                    # come from different students and are not comparable with each other, so
+                    # a figure that mixes them shows the folds, not the market. The student of
+                    # fold 2 is trained on 2021 only; every bar from 2022-01 on is unseen by it.
+                    if fold.fold_id == LATENT_FIGURE_FOLD_ID:
+                        fixed_idx = np.arange(int(te_idx[0]), len(df_all), dtype=np.int64)
+                        fixed_lob_t = torch.as_tensor(online_wins_all[fixed_idx], dtype=torch.float32, device=device)
+                        fixed_hidden = np.concatenate([
+                            student.encode_hidden(fixed_lob_t[s : s + 512]).cpu().numpy().astype(np.float32)
+                            for s in range(0, len(fixed_lob_t), 512)
+                        ], axis=0)
+                        _save_student_oos_hidden(
+                            out_dir / "student_single_model_hidden.npz",
+                            pd.DatetimeIndex(df_all.index[fixed_idx]),
+                            fixed_hidden,
+                        )
+                        del fixed_lob_t
                     if fold.fold_id == 1:
                         _, _, h_p = student(te_lob_t[:32])
                 if fold.fold_id == 1:
