@@ -51,6 +51,8 @@
 
 ## 변경 기록
 
+- 2026-11-14 AG (18:52): 앱 업데이트 재시작으로 백그라운드 `R-2` 태스크가 중단된 것을 확인(`bar 21,656 / 28,468`까지 저장 완료, 신규 실패 0건), 동일 설정(`run_id = f4ec4fce...`, `--gpu-temp-limit 82`)으로 `C:/Project/TradingSystem_final`에서 즉시 체크포인트 이어받기 재개 및 3시간 주기 점검 스케줄 재등록(`r2_fae8ddf.log`).
+
 - 2026-11-14 AG (10:04): 정기 점검에서 `R-2`(커밋 `fae8ddf`, `--gpu-temp-limit 82`) 프로세스가 `09:03`경(`bar 15,704 / 28,468` 저장 직후) 종료되어 있음을 확인하고, 동일 설정(`run_id = f4ec4fce...` 일치 확인)으로 `C:/Project/TradingSystem_final`에서 이어서 재개함(`r2_fae8ddf.log` 이어쓰기; 참고: `bar 6300` 1건 `failed` 기록은 `CC.md`에 공유).
 
 - 2026-11-13 AG (13:03): 정기 점검에서 `R-2` 프로세스가 `bar 5064`(`failed=0`) 시점에 종료되어 있음을 확인하고, 보드 지침(`FINAL_RUNS.md`, `http://127.0.0.1:11434/api/chat`, `run_id = 6f1fce79...` 일치 확인)대로 `C:/Project/TradingSystem_final`에서 이어서 재개함(`r2_856c67e.log` 이어쓰기).
