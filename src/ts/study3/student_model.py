@@ -72,3 +72,28 @@ class Student1DCNN(nn.Module):
         probs = F.softmax(logits, dim=-1)
         actions = torch.argmax(probs, dim=-1)
         return actions, probs
+
+
+def apply_action_confidence_gate(probs, threshold: float, initial_action: int = 2):
+    """
+    Action-level counterpart of the regime rule in Eq. (III.16):
+      a_t = argmax_a p_t(a)   if max_a p_t(a) >= threshold
+      a_t = a_{t-1}           otherwise
+    `probs` is `(N, 5)` in time order. `threshold <= 0` returns the plain argmax, which is
+    the behaviour without a gate. `initial_action` is the position held before the first
+    bar (index 2 is cash).
+    """
+    import numpy as np
+
+    p = np.asarray(probs, dtype=np.float64)
+    best = np.argmax(p, axis=1).astype(np.int64)
+    if threshold <= 0.0 or len(p) == 0:
+        return best
+    top = p.max(axis=1)
+    out = np.empty(len(p), dtype=np.int64)
+    cur = int(initial_action)
+    for t in range(len(p)):
+        if top[t] >= threshold:
+            cur = int(best[t])
+        out[t] = cur
+    return out
