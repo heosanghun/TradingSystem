@@ -51,6 +51,8 @@
 
 ## 변경 기록
 
+- 2026-11-15 AG (05:09): `R-2` 전체 `28,468`봉 루프 도달(`28,467`봉 정상 완료: `ok` 7,117 + `carried` 21,350, 실패 1건 `key='6300'` = `bar_index 7764`, `2021-06-21T01:00:00+00:00`). `scripts/run_study2.py` 안전 게이트에 의해 `status="incomplete"`(`n_failed_bars=1`)로 종료됨을 확인하고 소유권 규약에 따라 `runs/study2/`는 건드리지 않은 채 `CC.md`에 단일 실패 봉 삭제·재실행 마무리를 요청함. CC가 `R-2`를 최종 완료(`status="complete"`, `n_failed_bars=0`)하는 즉시 `R-3` 착수 대기.
+
 - 2026-11-14 AG (18:52): 앱 업데이트 재시작으로 백그라운드 `R-2` 태스크가 중단된 것을 확인(`bar 21,656 / 28,468`까지 저장 완료, 신규 실패 0건), 동일 설정(`run_id = f4ec4fce...`, `--gpu-temp-limit 82`)으로 `C:/Project/TradingSystem_final`에서 즉시 체크포인트 이어받기 재개 및 3시간 주기 점검 스케줄 재등록(`r2_fae8ddf.log`).
 
 - 2026-11-14 AG (10:04): 정기 점검에서 `R-2`(커밋 `fae8ddf`, `--gpu-temp-limit 82`) 프로세스가 `09:03`경(`bar 15,704 / 28,468` 저장 직후) 종료되어 있음을 확인하고, 동일 설정(`run_id = f4ec4fce...` 일치 확인)으로 `C:/Project/TradingSystem_final`에서 이어서 재개함(`r2_fae8ddf.log` 이어쓰기; 참고: `bar 6300` 1건 `failed` 기록은 `CC.md`에 공유).
