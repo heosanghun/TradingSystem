@@ -1,9 +1,14 @@
 """
 t-SNE projection of the student's 128-dimensional hidden vectors, with crisis periods marked.
 
-Input : runs/study3/student_oos_hidden.npz, written by the Study 3 run, with
+Input : runs/study3/student_single_model_hidden.npz, written by the Study 3 run, with
           timestamps_ns  (N,)      bar open time, UTC nanoseconds
-          hidden         (N, 128)  `Student1DCNN.encode_hidden` output for each test-fold bar
+          hidden         (N, 128)  `Student1DCNN.encode_hidden` output of ONE student (the
+                                   fold-2 model, trained on 2021 only) for every bar from
+                                   2022-01 on. None of these bars was used to train it.
+        The per-fold file `student_oos_hidden.npz` must not be used for this figure: each
+        fold has its own student, and their hidden spaces are not comparable, so a joint
+        projection separates the folds and not the market states.
 Output: runs/figures/student_latent_tsne.png (and .pdf), runs/figures/student_latent_tsne.json
 
 Everything on the figure is computed from that file. The numbers in the annotation are the
@@ -67,7 +72,7 @@ def knn_crisis_share(hidden: np.ndarray, is_crisis: np.ndarray, hours: np.ndarra
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="t-SNE figure of the student's hidden vectors.")
-    parser.add_argument("--hidden-file", type=str, default=str(PROJECT_ROOT / "runs" / "study3" / "student_oos_hidden.npz"))
+    parser.add_argument("--hidden-file", type=str, default=str(PROJECT_ROOT / "runs" / "study3" / "student_single_model_hidden.npz"))
     parser.add_argument("--out-dir", type=str, default=str(PROJECT_ROOT / "runs" / "figures"))
     parser.add_argument("--start", type=str, default="2022-01-01")
     parser.add_argument("--end", type=str, default="2024-01-01")
@@ -179,8 +184,11 @@ def main() -> None:
     ax.set_xlabel("t-SNE 차원 1")
     ax.set_ylabel("t-SNE 차원 2")
     ax.set_title(f"System 1 (1D-CNN) 128차원 은닉 잠재 공간의 t-SNE 투영 (시드 {args.seed})", fontsize=14, fontweight="bold")
+    ax.text(0.5, 1.005, "단일 학생 모델(2021년 자료로 학습), 표시된 2022~2023년 봉은 모두 학습에 쓰이지 않은 자료",
+            transform=ax.transAxes, ha="center", va="bottom", fontsize=9, color="#444444")
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
+    ax.title.set_position((0.5, 1.045))
     fig.tight_layout()
 
     out_dir = Path(args.out_dir)
