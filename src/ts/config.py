@@ -138,6 +138,11 @@ class Study3Config:
     batch_size: int = 256
     learning_rate: float = 3e-4
     max_grad_norm: float = 0.5
+    # D-18: the student changes its action only when its top action probability is at least
+    # this value (0 = plain argmax). Selected inside the first training fold. It is kept here
+    # and not in the JSON file because Study 3 refuses teacher signals produced under a
+    # different JSON hash, and this value does not affect Studies 1 and 2.
+    action_confidence_threshold: float = 0.8
 
 
 @dataclass(frozen=True)

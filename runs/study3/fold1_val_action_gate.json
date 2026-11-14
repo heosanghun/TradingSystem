@@ -1,0 +1,255 @@
+{
+  "script_path": "scripts/calibrate_study3_action_gate.py",
+  "preregistered_in_commit": "9f1fb59",
+  "executed_on_git_state": "9f1fb59",
+  "test_fold_accessed": false,
+  "lob_input_mode": "subbar_1m_microstructure",
+  "selection_rule": "highest mean Phase 2 Sharpe over the two validation splits; ties within 0.05 -> lowest mean turnover -> smallest theta",
+  "grid": [
+    0.0,
+    0.5,
+    0.6,
+    0.7,
+    0.8
+  ],
+  "summary_by_theta": [
+    {
+      "theta": 0.0,
+      "mean_val_sharpe": -14.184,
+      "mean_val_turnover": 0.179,
+      "val_sharpe_by_split": {
+        "A": -15.664,
+        "B": -12.704
+      }
+    },
+    {
+      "theta": 0.5,
+      "mean_val_sharpe": -12.61,
+      "mean_val_turnover": 0.1639,
+      "val_sharpe_by_split": {
+        "A": -13.918,
+        "B": -11.302
+      }
+    },
+    {
+      "theta": 0.6,
+      "mean_val_sharpe": -10.008,
+      "mean_val_turnover": 0.1061,
+      "val_sharpe_by_split": {
+        "A": -10.233,
+        "B": -9.782
+      }
+    },
+    {
+      "theta": 0.7,
+      "mean_val_sharpe": -3.774,
+      "mean_val_turnover": 0.0377,
+      "val_sharpe_by_split": {
+        "A": -5.669,
+        "B": -1.88
+      }
+    },
+    {
+      "theta": 0.8,
+      "mean_val_sharpe": -0.028,
+      "mean_val_turnover": 0.0014,
+      "val_sharpe_by_split": {
+        "A": 0.631,
+        "B": -0.687
+      }
+    }
+  ],
+  "selected_theta": 0.8,
+  "rows": [
+    {
+      "split": "A",
+      "theta": 0.0,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1050,
+        406,
+        8
+      ],
+      "val_mean_turnover": 0.1673,
+      "val_sharpe": -15.664,
+      "val_pre_cost_sharpe": -3.258,
+      "val_cum_return_pct": -47.3,
+      "val_mdd_pct": -47.3,
+      "mean_top_probability": 0.6684
+    },
+    {
+      "split": "A",
+      "theta": 0.5,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1060,
+        394,
+        10
+      ],
+      "val_mean_turnover": 0.1551,
+      "val_sharpe": -13.918,
+      "val_pre_cost_sharpe": -2.311,
+      "val_cum_return_pct": -43.36,
+      "val_mdd_pct": -43.36,
+      "mean_top_probability": 0.6684
+    },
+    {
+      "split": "A",
+      "theta": 0.6,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1132,
+        328,
+        4
+      ],
+      "val_mean_turnover": 0.0997,
+      "val_sharpe": -10.233,
+      "val_pre_cost_sharpe": -1.913,
+      "val_cum_return_pct": -31.97,
+      "val_mdd_pct": -31.97,
+      "mean_top_probability": 0.6684
+    },
+    {
+      "split": "A",
+      "theta": 0.7,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1251,
+        211,
+        2
+      ],
+      "val_mean_turnover": 0.0389,
+      "val_sharpe": -5.669,
+      "val_pre_cost_sharpe": -1.145,
+      "val_cum_return_pct": -14.44,
+      "val_mdd_pct": -16.33,
+      "mean_top_probability": 0.6684
+    },
+    {
+      "split": "A",
+      "theta": 0.8,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1409,
+        55,
+        0
+      ],
+      "val_mean_turnover": 0.002,
+      "val_sharpe": 0.631,
+      "val_pre_cost_sharpe": 1.189,
+      "val_cum_return_pct": 0.69,
+      "val_mdd_pct": -1.88,
+      "mean_top_probability": 0.6684
+    },
+    {
+      "split": "B",
+      "theta": 0.0,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        994,
+        453,
+        11
+      ],
+      "val_mean_turnover": 0.1907,
+      "val_sharpe": -12.704,
+      "val_pre_cost_sharpe": 3.531,
+      "val_cum_return_pct": -33.41,
+      "val_mdd_pct": -33.97,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "theta": 0.5,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1010,
+        438,
+        10
+      ],
+      "val_mean_turnover": 0.1728,
+      "val_sharpe": -11.302,
+      "val_pre_cost_sharpe": 3.734,
+      "val_cum_return_pct": -30.04,
+      "val_mdd_pct": -30.62,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "theta": 0.6,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1078,
+        371,
+        9
+      ],
+      "val_mean_turnover": 0.1125,
+      "val_sharpe": -9.782,
+      "val_pre_cost_sharpe": 1.429,
+      "val_cum_return_pct": -23.58,
+      "val_mdd_pct": -25.02,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "theta": 0.7,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1254,
+        202,
+        2
+      ],
+      "val_mean_turnover": 0.0364,
+      "val_sharpe": -1.88,
+      "val_pre_cost_sharpe": 3.404,
+      "val_cum_return_pct": -3.76,
+      "val_mdd_pct": -4.74,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "theta": 0.8,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1453,
+        5,
+        0
+      ],
+      "val_mean_turnover": 0.0007,
+      "val_sharpe": -0.687,
+      "val_pre_cost_sharpe": 0.125,
+      "val_cum_return_pct": -0.22,
+      "val_mdd_pct": -0.74,
+      "mean_top_probability": 0.655
+    }
+  ]
+}
