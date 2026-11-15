@@ -183,13 +183,12 @@ def main() -> None:
     cbar.set_label("시점")
     ax.set_xlabel("t-SNE 차원 1")
     ax.set_ylabel("t-SNE 차원 2")
-    ax.set_title(f"System 1 (1D-CNN) 128차원 은닉 잠재 공간의 t-SNE 투영 (시드 {args.seed})", fontsize=14, fontweight="bold")
-    ax.text(0.5, 1.005, "단일 학생 모델(2021년 자료로 학습), 표시된 2022~2023년 봉은 모두 학습에 쓰이지 않은 자료",
-            transform=ax.transAxes, ha="center", va="bottom", fontsize=9, color="#444444")
+    fig.suptitle(f"System 1 (1D-CNN) 128차원 은닉 잠재 공간의 t-SNE 투영 (시드 {args.seed})", fontsize=14, fontweight="bold", y=0.985)
+    ax.set_title("단일 학생 모델(2021년 자료로 학습), 표시된 2022~2023년 봉은 모두 학습에 쓰이지 않은 자료",
+                 fontsize=9, color="#444444", pad=6)
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
-    ax.title.set_position((0.5, 1.045))
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 0.965))
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
