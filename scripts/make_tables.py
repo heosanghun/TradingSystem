@@ -63,6 +63,23 @@ TEACHER_LATENCY_STAGES: Tuple[Tuple[str, str], ...] = (
 )
 
 
+REPEAT_SUMMARY_ROWS: Tuple[Tuple[str, str], ...] = (
+    ("Variant A 샤프 (기술 지표만)", "T6.10_VAR_A_SHARPE"),
+    ("Variant B 샤프 (1/N 고정)", "T6.10_VAR_B_SHARPE"),
+    ("Variant C 샤프 (단일 전문가)", "T6.10_VAR_C_SHARPE"),
+    ("Variant D 샤프 (연구 1 단독)", "T6.10_VAR_D_SHARPE"),
+    ("Variant D MDD (%)", "T6.10_VAR_D_MDD"),
+    ("온도 T = 1 샤프", "T6.12_TEMP_1_0_SHARPE"),
+    ("온도 T = 5 샤프", "T6.12_TEMP_5_0_SHARPE"),
+    ("온도 T = 20 샤프", "T6.12_TEMP_20_0_SHARPE"),
+    ("전문가 수 K = 3 샤프", "T6.13_EXP_3_SHARPE"),
+    ("전문가 수 K = 7 샤프", "T6.13_EXP_7_SHARPE"),
+    ("SHAP 시각 (%)", "T6.9_SHAP_VISUAL_PCT"),
+    ("SHAP 기술 (%)", "T6.9_SHAP_TECH_PCT"),
+    ("SHAP 감성 (%)", "T6.9_SHAP_SENTIMENT_PCT"),
+)
+
+
 def _fmt(rows: Dict[str, Dict[str, str]], nid: str, suffix: str = "") -> str:
     if nid not in rows:
         return "측정 대기"
@@ -212,6 +229,25 @@ def compile_markdown_tables(ledger_rows: Dict[str, Dict[str, str]]) -> Tuple[str
     )
     lines.append(f"| 교사-학생 행동 일치율 | {_fmt(ledger_rows, 'T6.15_TEACHER_STUDENT_AGREE_PCT', '%')} |")
     lines.append(f"| 근거 제거 시 결정 변화율 | {_fmt(ledger_rows, 'T6.15_EVIDENCE_FLIP_PCT', '%')} |\n")
+
+    # Repeat runs of Study 1 (same code, settings and seeds; ledger IDs with a _R<n> suffix).
+    repeat_tags = sorted({nid.rsplit("_", 1)[1] for nid in ledger_rows
+                          if nid.rsplit("_", 1)[-1][:1] == "R" and nid.rsplit("_", 1)[-1][1:].isdigit()})
+    if repeat_tags:
+        lines.append("## 연구 1 반복 실행 요약 (같은 코드·설정·시드, 실행 간 편차)\n")
+        header = "| 항목 | 첫 실행 | " + " | ".join(repeat_tags) + " | 평균 | 범위 |"
+        lines.append(header)
+        lines.append("| :--- |" + " :---: |" * (len(repeat_tags) + 3))
+        for label, nid in REPEAT_SUMMARY_ROWS:
+            ids = [nid] + [f"{nid}_{t}" for t in repeat_tags]
+            if not all(i in ledger_rows for i in ids):
+                continue
+            vals = [float(ledger_rows[i]["value"]) for i in ids]
+            cells = " | ".join(f"{v:.2f}" for v in vals)
+            lines.append(f"| {label} | {cells} | {sum(vals) / len(vals):.2f} | {max(vals) - min(vals):.2f} |")
+        lines.append("")
+        lines.append("주: 차트 인코더의 GPU 연산이 비결정적이어서 같은 시드에서도 값이 달라진다. "
+                     "Variant A는 차트 인코더를 쓰지 않아 매번 같은 값이 나온다.\n")
 
     populated = []
     pending = []
