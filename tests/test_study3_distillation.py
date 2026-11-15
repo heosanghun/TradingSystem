@@ -24,7 +24,12 @@ from ts.study3.distillation import (
     StudentDistillationTrainer,
     verify_property_5_1_orthogonality,
 )
-from ts.study3.student_model import Student1DCNN, apply_action_confidence_gate
+from ts.study3.student_model import (
+    Student1DCNN,
+    apply_action_confidence_gate,
+    execute_student_actions,
+    smooth_action_probabilities,
+)
 from ts.study3.teacher_signal import (
     FinBERTReasoningEncoder,
     build_aligned_distillation_dataset,
@@ -267,5 +272,12 @@ def test_apply_action_confidence_gate_causal_persistence() -> None:
 
     gated = apply_action_confidence_gate(probs, threshold=0.8, initial_action=2)
     assert gated.tolist() == [2, 3, 3, 0]
+
+    smoothed = smooth_action_probabilities(probs, span=3)
+    assert smoothed.shape == probs.shape
+    assert np.allclose(smoothed.sum(axis=1), 1.0, atol=1e-6)
+    assert np.allclose(smoothed[0], probs[0])
+    assert execute_student_actions(probs, threshold=0.8, smooth_span=1).tolist() == [2, 3, 3, 0]
+
 
 
