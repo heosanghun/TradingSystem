@@ -93,6 +93,9 @@ def _build_bar_lob_windows(
 # Fold whose student encodes the whole 2022-2023 period for the latent-space figure.
 LATENT_FIGURE_FOLD_ID = 2
 
+# Factors applied to all Phase 2 cost terms in the cost-sensitivity table (1.0 = the thesis model).
+COST_MULTIPLIERS = (0.0, 0.1, 0.25, 0.5, 1.0)
+
 
 def _save_student_oos_hidden(path: Path, bar_index: pd.DatetimeIndex, hidden: np.ndarray) -> None:
     """
@@ -398,6 +401,24 @@ def main() -> None:
     primary_weights = ACTION_WEIGHTS[primary_acts]
     res_p2 = bt.run_decisions(eval_df, primary_weights, phase=2)
 
+    # Cost sensitivity, reported next to Table 6.7: the same decisions evaluated with every
+    # Phase 2 cost term (fee, volatility slippage, market impact) scaled by one factor.
+    # "ungated" is the plain argmax action without the D-18 confidence gate.
+    cost_sensitivity = {}
+    for label, acts_x in (("GATED", primary_acts), ("UNGATED", ungated_acts)):
+        for mult in COST_MULTIPLIERS:
+            bt_m = CausalPortfolioBacktester(
+                initial_capital=cfg.evaluation.initial_capital_usdt,
+                bars_per_year=cfg.evaluation.btc_bars_per_year,
+                phase2_fee_rate=cfg.evaluation.phase2_fee_rate * mult,
+                phase2_atr_period=cfg.evaluation.phase2_atr_period,
+                phase2_kappa=cfg.evaluation.phase2_kappa * mult,
+                phase2_eta=cfg.evaluation.phase2_eta * mult,
+            )
+            cost_sensitivity[f"{label}_X{int(round(mult * 100)):03d}"] = bt_m.run_decisions(
+                eval_df, ACTION_WEIGHTS[acts_x], phase=2
+            ).summary.to_dict()
+
     crisis_proposed = {}
     for w_name, (c_start, c_end) in cfg.evaluation.crisis_windows.items():
         crisis_proposed[w_name] = compute_crisis_window_loss(
@@ -465,6 +486,8 @@ def main() -> None:
         oos_bar_indices=cat_te_idx,
         student_actions=primary_acts,
         student_weights=primary_weights,
+        student_action_probs=primary_probs.astype(np.float32),
+        student_ungated_actions=ungated_acts,
         phase2_net_returns=res_p2.bar_net_returns,
         phase1_net_returns=res_p1.bar_net_returns,
     )
@@ -474,6 +497,7 @@ def main() -> None:
         "lob_input_mode": lob_mode,
         "action_confidence_threshold": action_theta,
         "action_smoothing_span": action_span,
+        "cost_sensitivity_phase2": cost_sensitivity,
         "share_of_bars_where_gate_changed_action_pct": float(np.mean(primary_acts != ungated_acts)) * 100.0,
         "mean_top_action_probability": float(np.mean(primary_probs.max(axis=1))),
         "teacher_signals_present": teacher_present,
@@ -516,6 +540,11 @@ def main() -> None:
         clean_l3 = l3_key.replace(".", "_")
         ledger.record(f"T6.11_LAMBDA3_{clean_l3}_SHARPE", "Table 6.11", f"Lambda_3={l3_key} Phase 2 Sharpe", float(d_l3["sharpe"]), "{:.2f}", "", **rec_kw)
 
+    for cs_key, cs_val in cost_sensitivity.items():
+        ledger.record(f"CH6_COSTSENS_{cs_key}_SHARPE", "Ch.VI cost sensitivity",
+                      f"Student Phase 2 Sharpe, {cs_key} (cost scaled by X/100)", cs_val["sharpe"], "{:.2f}", "", **rec_kw)
+        ledger.record(f"CH6_COSTSENS_{cs_key}_CUMRET", "Ch.VI cost sensitivity",
+                      f"Student Phase 2 cumulative return, {cs_key}", cs_val["cum_return_pct"], "{:.2f}", "%", **rec_kw)
     ledger.record("T6.15_TEACHER_STUDENT_AGREE_PCT", "Table 6.15", "Teacher-Student Action Agreement Rate", agreement_pct, "{:.2f}", "%", **rec_kw)
     print("[Study 3] Completed and recorded ledger entries.")
 

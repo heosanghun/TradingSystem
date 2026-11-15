@@ -1,0 +1,1553 @@
+{
+  "script_path": "scripts/calibrate_study3_action_gate.py",
+  "preregistered_in_commit": "bf03611",
+  "executed_on_git_state": "bf03611",
+  "test_fold_accessed": false,
+  "lob_input_mode": "subbar_1m_microstructure",
+  "selection_rule": "highest mean Phase 2 Sharpe over the validation splits; ties within 0.05 -> lowest mean turnover -> smallest span -> smallest theta",
+  "grid": [
+    [
+      1,
+      0.0
+    ],
+    [
+      1,
+      0.6
+    ],
+    [
+      1,
+      0.7
+    ],
+    [
+      1,
+      0.8
+    ],
+    [
+      24,
+      0.0
+    ],
+    [
+      24,
+      0.6
+    ],
+    [
+      24,
+      0.7
+    ],
+    [
+      24,
+      0.8
+    ],
+    [
+      72,
+      0.0
+    ],
+    [
+      72,
+      0.6
+    ],
+    [
+      72,
+      0.7
+    ],
+    [
+      72,
+      0.8
+    ],
+    [
+      168,
+      0.0
+    ],
+    [
+      168,
+      0.6
+    ],
+    [
+      168,
+      0.7
+    ],
+    [
+      168,
+      0.8
+    ],
+    [
+      336,
+      0.0
+    ],
+    [
+      336,
+      0.6
+    ],
+    [
+      336,
+      0.7
+    ],
+    [
+      336,
+      0.8
+    ]
+  ],
+  "splits": [
+    [
+      "C",
+      "2021-04-01T00:00:00Z",
+      "2021-06-01T00:00:00Z"
+    ],
+    [
+      "A",
+      "2021-06-01T00:00:00Z",
+      "2021-08-01T00:00:00Z"
+    ],
+    [
+      "B",
+      "2021-08-01T00:00:00Z",
+      "2021-10-01T00:00:00Z"
+    ]
+  ],
+  "summary_by_candidate": [
+    {
+      "span": 1,
+      "theta": 0.0,
+      "mean_val_sharpe": -12.946,
+      "mean_val_turnover": 0.1638,
+      "mean_non_cash_share": 0.2646,
+      "val_sharpe_by_split": {
+        "C": -12.707,
+        "A": -13.426,
+        "B": -12.704
+      }
+    },
+    {
+      "span": 1,
+      "theta": 0.6,
+      "mean_val_sharpe": -8.698,
+      "mean_val_turnover": 0.0934,
+      "mean_non_cash_share": 0.2041,
+      "val_sharpe_by_split": {
+        "C": -8.425,
+        "A": -7.887,
+        "B": -9.782
+      }
+    },
+    {
+      "span": 1,
+      "theta": 0.7,
+      "mean_val_sharpe": -2.496,
+      "mean_val_turnover": 0.0295,
+      "mean_non_cash_share": 0.0973,
+      "val_sharpe_by_split": {
+        "C": -2.511,
+        "A": -3.096,
+        "B": -1.88
+      }
+    },
+    {
+      "span": 1,
+      "theta": 0.8,
+      "mean_val_sharpe": -2.102,
+      "mean_val_turnover": 0.0018,
+      "mean_non_cash_share": 0.0116,
+      "val_sharpe_by_split": {
+        "C": -0.712,
+        "A": -4.907,
+        "B": -0.687
+      }
+    },
+    {
+      "span": 24,
+      "theta": 0.0,
+      "mean_val_sharpe": -0.215,
+      "mean_val_turnover": 0.003,
+      "mean_non_cash_share": 0.0112,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": -0.646
+      }
+    },
+    {
+      "span": 24,
+      "theta": 0.6,
+      "mean_val_sharpe": 0.0,
+      "mean_val_turnover": 0.0,
+      "mean_non_cash_share": 0.0,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": 0.0
+      }
+    },
+    {
+      "span": 24,
+      "theta": 0.7,
+      "mean_val_sharpe": 0.0,
+      "mean_val_turnover": 0.0,
+      "mean_non_cash_share": 0.0,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": 0.0
+      }
+    },
+    {
+      "span": 24,
+      "theta": 0.8,
+      "mean_val_sharpe": 0.0,
+      "mean_val_turnover": 0.0,
+      "mean_non_cash_share": 0.0,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": 0.0
+      }
+    },
+    {
+      "span": 72,
+      "theta": 0.0,
+      "mean_val_sharpe": -0.545,
+      "mean_val_turnover": 0.0002,
+      "mean_non_cash_share": 0.0034,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": -1.634
+      }
+    },
+    {
+      "span": 72,
+      "theta": 0.6,
+      "mean_val_sharpe": 0.0,
+      "mean_val_turnover": 0.0,
+      "mean_non_cash_share": 0.0,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": 0.0
+      }
+    },
+    {
+      "span": 72,
+      "theta": 0.7,
+      "mean_val_sharpe": 0.0,
+      "mean_val_turnover": 0.0,
+      "mean_non_cash_share": 0.0,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": 0.0
+      }
+    },
+    {
+      "span": 72,
+      "theta": 0.8,
+      "mean_val_sharpe": 0.0,
+      "mean_val_turnover": 0.0,
+      "mean_non_cash_share": 0.0,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": 0.0
+      }
+    },
+    {
+      "span": 168,
+      "theta": 0.0,
+      "mean_val_sharpe": -1.058,
+      "mean_val_turnover": 0.0002,
+      "mean_non_cash_share": 0.005,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": -3.173
+      }
+    },
+    {
+      "span": 168,
+      "theta": 0.6,
+      "mean_val_sharpe": 0.0,
+      "mean_val_turnover": 0.0,
+      "mean_non_cash_share": 0.0,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": 0.0
+      }
+    },
+    {
+      "span": 168,
+      "theta": 0.7,
+      "mean_val_sharpe": 0.0,
+      "mean_val_turnover": 0.0,
+      "mean_non_cash_share": 0.0,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": 0.0
+      }
+    },
+    {
+      "span": 168,
+      "theta": 0.8,
+      "mean_val_sharpe": 0.0,
+      "mean_val_turnover": 0.0,
+      "mean_non_cash_share": 0.0,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": 0.0
+      }
+    },
+    {
+      "span": 336,
+      "theta": 0.0,
+      "mean_val_sharpe": -1.482,
+      "mean_val_turnover": 0.0002,
+      "mean_non_cash_share": 0.0119,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": -4.446
+      }
+    },
+    {
+      "span": 336,
+      "theta": 0.6,
+      "mean_val_sharpe": 0.0,
+      "mean_val_turnover": 0.0,
+      "mean_non_cash_share": 0.0,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": 0.0
+      }
+    },
+    {
+      "span": 336,
+      "theta": 0.7,
+      "mean_val_sharpe": 0.0,
+      "mean_val_turnover": 0.0,
+      "mean_non_cash_share": 0.0,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": 0.0
+      }
+    },
+    {
+      "span": 336,
+      "theta": 0.8,
+      "mean_val_sharpe": 0.0,
+      "mean_val_turnover": 0.0,
+      "mean_non_cash_share": 0.0,
+      "val_sharpe_by_split": {
+        "C": 0.0,
+        "A": 0.0,
+        "B": 0.0
+      }
+    }
+  ],
+  "selected_span": 24,
+  "selected_theta": 0.6,
+  "rows": [
+    {
+      "split": "C",
+      "span": 1,
+      "theta": 0.0,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        1,
+        1100,
+        355,
+        3
+      ],
+      "val_mean_turnover": 0.1522,
+      "val_sharpe": -12.707,
+      "val_pre_cost_sharpe": -0.405,
+      "val_cum_return_pct": -41.29,
+      "val_mdd_pct": -41.29,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 1,
+      "theta": 0.6,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1175,
+        283,
+        1
+      ],
+      "val_mean_turnover": 0.0932,
+      "val_sharpe": -8.425,
+      "val_pre_cost_sharpe": -0.707,
+      "val_cum_return_pct": -28.11,
+      "val_mdd_pct": -30.22,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 1,
+      "theta": 0.7,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1323,
+        136,
+        0
+      ],
+      "val_mean_turnover": 0.0315,
+      "val_sharpe": -2.511,
+      "val_pre_cost_sharpe": 0.408,
+      "val_cum_return_pct": -8.8,
+      "val_mdd_pct": -12.55,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 1,
+      "theta": 0.8,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1434,
+        25,
+        0
+      ],
+      "val_mean_turnover": 0.0034,
+      "val_sharpe": -0.712,
+      "val_pre_cost_sharpe": 0.996,
+      "val_cum_return_pct": -0.49,
+      "val_mdd_pct": -1.35,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 24,
+      "theta": 0.0,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 24,
+      "theta": 0.6,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 24,
+      "theta": 0.7,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 24,
+      "theta": 0.8,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 72,
+      "theta": 0.0,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 72,
+      "theta": 0.6,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 72,
+      "theta": 0.7,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 72,
+      "theta": 0.8,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 168,
+      "theta": 0.0,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 168,
+      "theta": 0.6,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 168,
+      "theta": 0.7,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 168,
+      "theta": 0.8,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 336,
+      "theta": 0.0,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 336,
+      "theta": 0.6,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 336,
+      "theta": 0.7,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "C",
+      "span": 336,
+      "theta": 0.8,
+      "sub_train_bars": 4360,
+      "val_bars": 1459,
+      "val_action_counts": [
+        0,
+        0,
+        1459,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6809
+    },
+    {
+      "split": "A",
+      "span": 1,
+      "theta": 0.0,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        1,
+        1128,
+        323,
+        12
+      ],
+      "val_mean_turnover": 0.1486,
+      "val_sharpe": -13.426,
+      "val_pre_cost_sharpe": -1.622,
+      "val_cum_return_pct": -40.56,
+      "val_mdd_pct": -40.61,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 1,
+      "theta": 0.6,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1234,
+        220,
+        10
+      ],
+      "val_mean_turnover": 0.0745,
+      "val_sharpe": -7.887,
+      "val_pre_cost_sharpe": -0.608,
+      "val_cum_return_pct": -23.02,
+      "val_mdd_pct": -25.32,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 1,
+      "theta": 0.7,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1378,
+        80,
+        6
+      ],
+      "val_mean_turnover": 0.0205,
+      "val_sharpe": -3.096,
+      "val_pre_cost_sharpe": 0.443,
+      "val_cum_return_pct": -6.13,
+      "val_mdd_pct": -7.76,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 1,
+      "theta": 0.8,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1443,
+        0,
+        21
+      ],
+      "val_mean_turnover": 0.0014,
+      "val_sharpe": -4.907,
+      "val_pre_cost_sharpe": -4.587,
+      "val_cum_return_pct": -7.64,
+      "val_mdd_pct": -9.9,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 24,
+      "theta": 0.0,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 24,
+      "theta": 0.6,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 24,
+      "theta": 0.7,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 24,
+      "theta": 0.8,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 72,
+      "theta": 0.0,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 72,
+      "theta": 0.6,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 72,
+      "theta": 0.7,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 72,
+      "theta": 0.8,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 168,
+      "theta": 0.0,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 168,
+      "theta": 0.6,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 168,
+      "theta": 0.7,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 168,
+      "theta": 0.8,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 336,
+      "theta": 0.0,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 336,
+      "theta": 0.6,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 336,
+      "theta": 0.7,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "A",
+      "span": 336,
+      "theta": 0.8,
+      "sub_train_bars": 5819,
+      "val_bars": 1464,
+      "val_action_counts": [
+        0,
+        0,
+        1464,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.6694
+    },
+    {
+      "split": "B",
+      "span": 1,
+      "theta": 0.0,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        994,
+        453,
+        11
+      ],
+      "val_mean_turnover": 0.1907,
+      "val_sharpe": -12.704,
+      "val_pre_cost_sharpe": 3.531,
+      "val_cum_return_pct": -33.41,
+      "val_mdd_pct": -33.97,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 1,
+      "theta": 0.6,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1078,
+        371,
+        9
+      ],
+      "val_mean_turnover": 0.1125,
+      "val_sharpe": -9.782,
+      "val_pre_cost_sharpe": 1.429,
+      "val_cum_return_pct": -23.58,
+      "val_mdd_pct": -25.02,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 1,
+      "theta": 0.7,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1254,
+        202,
+        2
+      ],
+      "val_mean_turnover": 0.0364,
+      "val_sharpe": -1.88,
+      "val_pre_cost_sharpe": 3.404,
+      "val_cum_return_pct": -3.76,
+      "val_mdd_pct": -4.74,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 1,
+      "theta": 0.8,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1453,
+        5,
+        0
+      ],
+      "val_mean_turnover": 0.0007,
+      "val_sharpe": -0.687,
+      "val_pre_cost_sharpe": 0.125,
+      "val_cum_return_pct": -0.22,
+      "val_mdd_pct": -0.74,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 24,
+      "theta": 0.0,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1409,
+        49,
+        0
+      ],
+      "val_mean_turnover": 0.0089,
+      "val_sharpe": -0.646,
+      "val_pre_cost_sharpe": 2.336,
+      "val_cum_return_pct": -0.56,
+      "val_mdd_pct": -2.07,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 24,
+      "theta": 0.6,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1458,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 24,
+      "theta": 0.7,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1458,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 24,
+      "theta": 0.8,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1458,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 72,
+      "theta": 0.0,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1443,
+        15,
+        0
+      ],
+      "val_mean_turnover": 0.0007,
+      "val_sharpe": -1.634,
+      "val_pre_cost_sharpe": -1.18,
+      "val_cum_return_pct": -0.75,
+      "val_mdd_pct": -1.46,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 72,
+      "theta": 0.6,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1458,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 72,
+      "theta": 0.7,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1458,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 72,
+      "theta": 0.8,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1458,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 168,
+      "theta": 0.0,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1436,
+        22,
+        0
+      ],
+      "val_mean_turnover": 0.0007,
+      "val_sharpe": -3.173,
+      "val_pre_cost_sharpe": -2.853,
+      "val_cum_return_pct": -1.97,
+      "val_mdd_pct": -2.67,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 168,
+      "theta": 0.6,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1458,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 168,
+      "theta": 0.7,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1458,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 168,
+      "theta": 0.8,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1458,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 336,
+      "theta": 0.0,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1406,
+        52,
+        0
+      ],
+      "val_mean_turnover": 0.0007,
+      "val_sharpe": -4.446,
+      "val_pre_cost_sharpe": -4.24,
+      "val_cum_return_pct": -4.35,
+      "val_mdd_pct": -5.03,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 336,
+      "theta": 0.6,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1458,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 336,
+      "theta": 0.7,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1458,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.655
+    },
+    {
+      "split": "B",
+      "span": 336,
+      "theta": 0.8,
+      "sub_train_bars": 7283,
+      "val_bars": 1458,
+      "val_action_counts": [
+        0,
+        0,
+        1458,
+        0,
+        0
+      ],
+      "val_mean_turnover": 0.0,
+      "val_sharpe": 0.0,
+      "val_pre_cost_sharpe": 0.0,
+      "val_cum_return_pct": 0.0,
+      "val_mdd_pct": 0.0,
+      "mean_top_probability": 0.655
+    }
+  ]
+}
