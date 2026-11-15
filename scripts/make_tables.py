@@ -230,6 +230,22 @@ def compile_markdown_tables(ledger_rows: Dict[str, Dict[str, str]]) -> Tuple[str
     lines.append(f"| 교사-학생 행동 일치율 | {_fmt(ledger_rows, 'T6.15_TEACHER_STUDENT_AGREE_PCT', '%')} |")
     lines.append(f"| 근거 제거 시 결정 변화율 | {_fmt(ledger_rows, 'T6.15_EVIDENCE_FLIP_PCT', '%')} |\n")
 
+    # Fixed reference rules scored under the same protocol (no learning).
+    if any(nid.startswith("CH6_REF_") for nid in ledger_rows):
+        lines.append("## 같은 평가 절차에서의 기준 규칙 (학습 없음, Phase 2)" + chr(10))
+        lines.append("| 규칙 | 비용 전 샤프 | 비용 후 샤프 | 누적 수익률 | 봉당 회전율 |")
+        lines.append("| :--- | :---: | :---: | :---: | :---: |")
+        ref_rows = [("항상 매수 (Buy & Hold)", "ALWAYS_LONG")]
+        for n in (24, 72, 168, 720):
+            ref_rows.append((f"종가가 {n}봉 이동 평균 위면 매수, 아니면 현금", f"SMA{n}_LONG_OR_CASH"))
+        for n in (24, 72, 168, 720):
+            ref_rows.append((f"{n}봉 가격 변화의 부호 (매수/매도)", f"MOM{n}_LONG_SHORT"))
+        for label, key in ref_rows:
+            lines.append(
+                f"| {label} | {_fmt(ledger_rows, f'CH6_REF_{key}_GROSS_SHARPE')} | {_fmt(ledger_rows, f'CH6_REF_{key}_SHARPE')} | "
+                f"{_fmt(ledger_rows, f'CH6_REF_{key}_CUMRET', '%')} | {_fmt(ledger_rows, f'CH6_REF_{key}_TURNOVER')} |")
+        lines.append("")
+
     # Cost sensitivity of the student's decisions (Study 3).
     if any(nid.startswith("CH6_COSTSENS_") for nid in ledger_rows):
         mults = ("000", "010", "025", "050", "100")
