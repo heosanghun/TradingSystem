@@ -24,7 +24,7 @@ from ts.study3.distillation import (
     StudentDistillationTrainer,
     verify_property_5_1_orthogonality,
 )
-from ts.study3.student_model import Student1DCNN
+from ts.study3.student_model import Student1DCNN, apply_action_confidence_gate
 from ts.study3.teacher_signal import (
     FinBERTReasoningEncoder,
     build_aligned_distillation_dataset,
@@ -250,4 +250,22 @@ def test_student_oos_hidden_export_roundtrips_with_make_latent_figure(tmp_path: 
     assert proc.returncode == 0, proc.stderr + proc.stdout
     assert (out_fig_dir / "student_latent_tsne.png").is_file()
     assert (out_fig_dir / "student_latent_tsne.json").is_file()
+
+
+def test_apply_action_confidence_gate_causal_persistence() -> None:
+    probs = np.array(
+        [
+            [0.05, 0.05, 0.40, 0.45, 0.05],  # top=3 (0.45 < 0.8) -> stays initial cash (2)
+            [0.01, 0.01, 0.05, 0.85, 0.08],  # top=3 (0.85 >= 0.8) -> switches to 3
+            [0.05, 0.05, 0.55, 0.30, 0.05],  # top=2 (0.55 < 0.8) -> keeps held 3
+            [0.82, 0.05, 0.05, 0.04, 0.04],  # top=0 (0.82 >= 0.8) -> switches to 0
+        ],
+        dtype=np.float32,
+    )
+    ungated = apply_action_confidence_gate(probs, threshold=0.0)
+    assert ungated.tolist() == [3, 3, 2, 0]
+
+    gated = apply_action_confidence_gate(probs, threshold=0.8, initial_action=2)
+    assert gated.tolist() == [2, 3, 3, 0]
+
 
