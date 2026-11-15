@@ -143,6 +143,9 @@ class Study3Config:
     # and not in the JSON file because Study 3 refuses teacher signals produced under a
     # different JSON hash, and this value does not affect Studies 1 and 2.
     action_confidence_threshold: float = 0.8
+    # D-19: span (in bars) of the causal exponential average applied to the student's action
+    # probabilities before the gate (1 = no smoothing).
+    action_smoothing_span: int = 1
 
 
 @dataclass(frozen=True)

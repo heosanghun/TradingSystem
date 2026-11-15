@@ -42,11 +42,20 @@ from ts.eval.walk_forward import generate_phase2_walk_forward_folds
 from ts.ledger import read_git_state
 from ts.study1.ppo_expert import ACTION_WEIGHTS
 from ts.study3.distillation import StudentDistillationTrainer
-from ts.study3.student_model import apply_action_confidence_gate
+from ts.study3.student_model import execute_student_actions
 from ts.study3.teacher_signal import FinBERTReasoningEncoder, build_aligned_distillation_dataset
 
 THETA_GRID = (0.0, 0.5, 0.6, 0.7, 0.8)
+SPAN_GRID = (1,)
 SPLITS = (
+    ("A", "2021-06-01T00:00:00Z", "2021-08-01T00:00:00Z"),
+    ("B", "2021-08-01T00:00:00Z", "2021-10-01T00:00:00Z"),
+)
+# D-19 adds an earlier validation window and the smoothing span.
+D19_THETA_GRID = (0.0, 0.6, 0.7, 0.8)
+D19_SPAN_GRID = (1, 24, 72, 168, 336)
+D19_SPLITS = (
+    ("C", "2021-04-01T00:00:00Z", "2021-06-01T00:00:00Z"),
     ("A", "2021-06-01T00:00:00Z", "2021-08-01T00:00:00Z"),
     ("B", "2021-08-01T00:00:00Z", "2021-10-01T00:00:00Z"),
 )
@@ -58,7 +67,10 @@ def main() -> None:
     parser.add_argument("--study2-dir", type=str, default=str(PROJECT_ROOT / "runs" / "study2"))
     parser.add_argument("--output", type=str, default=str(PROJECT_ROOT / "runs" / "study3" / "fold1_val_action_gate.json"))
     parser.add_argument("--preregistered-commit", type=str, default="")
+    parser.add_argument("--d19", action="store_true", help="Use the D-19 grid (smoothing span x threshold, three splits).")
     args = parser.parse_args()
+    theta_grid, span_grid, splits = (D19_THETA_GRID, D19_SPAN_GRID, D19_SPLITS) if args.d19 else (THETA_GRID, SPAN_GRID, SPLITS)
+    candidates = [(sp, th) for sp in span_grid for th in theta_grid]
 
     cfg = SystemConfig.from_json(args.config)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -92,7 +104,7 @@ def main() -> None:
     bt = CausalPortfolioBacktester(initial_capital=cfg.evaluation.initial_capital_usdt, bars_per_year=cfg.evaluation.btc_bars_per_year)
 
     rows: List[Dict[str, object]] = []
-    for split_name, v_start, v_end in SPLITS:
+    for split_name, v_start, v_end in splits:
         v0, v1 = pd.Timestamp(v_start), pd.Timestamp(v_end)
         sub_idx = tr_idx[ts_tr < v0]
         val_idx = tr_idx[(ts_tr >= v0) & (ts_tr < v1)]
@@ -113,13 +125,13 @@ def main() -> None:
             _, probs_t = student.act_online(torch.as_tensor(online_wins_all[val_idx], dtype=torch.float32, device=device))
         probs = probs_t.cpu().numpy()
         df_val = df_all.iloc[val_idx].copy()
-        for theta in THETA_GRID:
-            acts = apply_action_confidence_gate(probs, theta)
+        for span, theta in candidates:
+            acts = execute_student_actions(probs, theta, span)
             w = ACTION_WEIGHTS[acts]
             res = bt.run_decisions(df_val, w, phase=2)
             gross = res.bar_gross_returns
             row = {
-                "split": split_name, "theta": theta, "sub_train_bars": int(len(sub_idx)), "val_bars": int(len(val_idx)),
+                "split": split_name, "span": span, "theta": theta, "sub_train_bars": int(len(sub_idx)), "val_bars": int(len(val_idx)),
                 "val_action_counts": np.bincount(acts, minlength=5).tolist(),
                 "val_mean_turnover": round(float(np.mean(np.abs(np.diff(w, prepend=0.0)))), 4),
                 "val_sharpe": round(float(res.summary.sharpe), 3),
@@ -128,28 +140,31 @@ def main() -> None:
                 "val_mdd_pct": round(float(res.summary.mdd_pct), 2),
                 "mean_top_probability": round(float(np.mean(probs.max(axis=1))), 4),
             }
-            print("[D-18 Row]", json.dumps(row), flush=True)
+            print("[Gate Row]", json.dumps(row), flush=True)
             rows.append(row)
 
     table = []
-    for theta in THETA_GRID:
-        rs = [r for r in rows if r["theta"] == theta]
-        table.append({"theta": theta, "mean_val_sharpe": round(float(np.mean([r["val_sharpe"] for r in rs])), 3),
+    for span, theta in candidates:
+        rs = [r for r in rows if r["theta"] == theta and r["span"] == span]
+        table.append({"span": span, "theta": theta,
+                      "mean_val_sharpe": round(float(np.mean([r["val_sharpe"] for r in rs])), 3),
                       "mean_val_turnover": round(float(np.mean([r["val_mean_turnover"] for r in rs])), 4),
+                      "mean_non_cash_share": round(float(np.mean([1.0 - r["val_action_counts"][2] / r["val_bars"] for r in rs])), 4),
                       "val_sharpe_by_split": {r["split"]: r["val_sharpe"] for r in rs}})
     best = max(t["mean_val_sharpe"] for t in table)
     tied = [t for t in table if best - t["mean_val_sharpe"] <= 0.05]
-    tied.sort(key=lambda t: (t["mean_val_turnover"], t["theta"]))
+    tied.sort(key=lambda t: (t["mean_val_turnover"], t["span"], t["theta"]))
     selected = tied[0]
     out = {
         "script_path": "scripts/calibrate_study3_action_gate.py", "preregistered_in_commit": args.preregistered_commit,
         "executed_on_git_state": read_git_state().label, "test_fold_accessed": False, "lob_input_mode": lob_mode,
-        "selection_rule": "highest mean Phase 2 Sharpe over the two validation splits; ties within 0.05 -> lowest mean turnover -> smallest theta",
-        "grid": list(THETA_GRID), "summary_by_theta": table, "selected_theta": selected["theta"], "rows": rows,
+        "selection_rule": "highest mean Phase 2 Sharpe over the validation splits; ties within 0.05 -> lowest mean turnover -> smallest span -> smallest theta",
+        "grid": [list(c) for c in candidates], "splits": [list(x) for x in splits], "summary_by_candidate": table,
+        "selected_span": selected["span"], "selected_theta": selected["theta"], "rows": rows,
     }
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(out, indent=2), encoding="utf-8")
-    print("[D-18 Selected]", json.dumps(selected), flush=True)
+    print("[Gate Selected]", json.dumps(selected), flush=True)
 
 
 if __name__ == "__main__":
