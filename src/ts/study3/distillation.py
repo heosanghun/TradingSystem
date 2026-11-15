@@ -129,7 +129,15 @@ class StudentDistillationTrainer:
         max_grad_norm: float = 0.5,
         seed: int = 42,
         device: Optional[torch.device] = None,
+        task_objective: str = "ppo",
+        net_sharpe_seq_len: int = 64,
+        bars_per_year: float = 8760.0,
     ) -> None:
+        if task_objective not in ("ppo", "net_sharpe"):
+            raise ValueError(f"unknown task objective: {task_objective}")
+        self.task_objective = task_objective
+        self.net_sharpe_seq_len = int(net_sharpe_seq_len)
+        self.bars_per_year = float(bars_per_year)
         self.lambda_reasoning = float(lambda_reasoning)
         self.lambda_task = 0.5 * (1.0 - self.lambda_reasoning)
         self.lambda_policy = 0.5 * (1.0 - self.lambda_reasoning)
@@ -153,7 +161,99 @@ class StudentDistillationTrainer:
             c_e=c_e,
         )
 
+    def _fit_net_sharpe(self, pack: TeacherSignalPack) -> Tuple[Student1DCNN, List[Dict[str, float]]]:
+        """
+        Task loss = minus the net-of-cost Sharpe ratio of the expected position, computed on
+        contiguous runs of bars (turnover-regularised Sharpe loss of Lim, Zohren & Roberts 2019):
+
+          pi_t = sum_a softmax(z_t)(a) * w(a)
+          R_t  = pi_t * r_{t+1} - c_t * |pi_t - pi_{t-1}|
+          L_task = - mean(R) / std(R) * sqrt(bars_per_year)
+
+        The turnover term links neighbouring bars, so the gradient rewards positions that are
+        stable over time. The student stays stateless: it does not receive its previous
+        position. The policy and reasoning distillation terms and their weights are unchanged.
+        The value and entropy terms of the PPO task loss are not used because no action is
+        sampled. Each batch holds `batch_size // seq_len` runs of `seq_len + 1` bars; the first
+        bar of a run only supplies the previous position. One of the bar's windows is drawn at
+        random per bar. An epoch has the same number of steps as the PPO objective.
+        """
+        torch.manual_seed(self.seed)
+        rng = np.random.default_rng(self.seed)
+
+        model = Student1DCNN().to(self.device)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=self.lr, weight_decay=1e-4)
+
+        n = len(pack.lob_windows)
+        lob_t = torch.as_tensor(pack.lob_windows, dtype=torch.float32, device=self.device)
+        t_logits_t = torch.as_tensor(pack.teacher_logits, dtype=torch.float32, device=self.device)
+        t_reason_t = torch.as_tensor(pack.teacher_reasoning, dtype=torch.float32, device=self.device)
+        aw_t = torch.as_tensor(np.asarray(ACTION_WEIGHTS), dtype=torch.float32, device=self.device)
+
+        _, first, counts = np.unique(pack.bar_indices, return_index=True, return_counts=True)
+        n_bars = len(first)
+        r_bar = torch.as_tensor(pack.bar_returns[first], dtype=torch.float32, device=self.device)
+        c_bar = torch.as_tensor(pack.cost_rates[first], dtype=torch.float32, device=self.device)
+
+        seq = max(2, min(self.net_sharpe_seq_len, n_bars - 1))
+        runs = max(1, self.batch_size // seq)
+        steps = max(1, n // self.batch_size)
+        offsets = np.arange(seq + 1)
+        zero = torch.zeros((), dtype=torch.float32, device=self.device)
+        scale = float(np.sqrt(self.bars_per_year))
+        history: List[Dict[str, float]] = []
+
+        for epoch in range(self.epochs):
+            model.train()
+            ep_tot, ep_tsk, ep_pol, ep_rsn = 0.0, 0.0, 0.0, 0.0
+            for _ in range(steps):
+                starts = rng.integers(0, n_bars - seq, size=runs)
+                bars = starts[:, None] + offsets[None, :]
+                win = first[bars] + rng.integers(0, counts[bars])
+                flat = torch.as_tensor(win.reshape(-1), dtype=torch.long, device=self.device)
+                bars_t = torch.as_tensor(bars, dtype=torch.long, device=self.device)
+
+                optimizer.zero_grad()
+                s_logits, _s_val, h_proj = model(lob_t[flat])
+                pi = (F.softmax(s_logits, dim=-1) @ aw_t).reshape(runs, seq + 1)
+                net = pi[:, 1:] * r_bar[bars_t[:, 1:]] - c_bar[bars_t[:, 1:]] * (pi[:, 1:] - pi[:, :-1]).abs()
+                net = net.reshape(-1)
+                sharpe_loss = -(net.mean() / (net.std() + 1e-8)) * scale
+
+                tot_l, tsk_l, pol_l, rsn_l = self.loss_fn(
+                    student_logits=s_logits,
+                    teacher_logits=t_logits_t[flat],
+                    student_projected=h_proj,
+                    teacher_reasoning=t_reason_t[flat],
+                    ppo_actor_loss=sharpe_loss,
+                    ppo_critic_loss=zero,
+                    policy_entropy=zero,
+                )
+                tot_l.backward()
+                nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.max_grad_norm)
+                optimizer.step()
+
+                ep_tot += float(tot_l.item())
+                ep_tsk += float(tsk_l.item())
+                ep_pol += float(pol_l.item())
+                ep_rsn += float(rsn_l.item())
+
+            history.append(
+                {
+                    "epoch": float(epoch + 1),
+                    "total_loss": ep_tot / steps,
+                    "task_loss": ep_tsk / steps,
+                    "policy_loss": ep_pol / steps,
+                    "reasoning_loss": ep_rsn / steps,
+                }
+            )
+
+        model.eval()
+        return model, history
+
     def fit(self, pack: TeacherSignalPack) -> Tuple[Student1DCNN, List[Dict[str, float]]]:
+        if self.task_objective == "net_sharpe":
+            return self._fit_net_sharpe(pack)
         torch.manual_seed(self.seed)
         rng = np.random.default_rng(self.seed)
 

@@ -122,3 +122,37 @@ def smooth_action_probabilities(probs, span: int):
 def execute_student_actions(probs, threshold: float, smooth_span: int = 1, initial_action: int = 2):
     """Execution rule of the student: smooth the probabilities, then apply the confidence gate."""
     return apply_action_confidence_gate(smooth_action_probabilities(probs, smooth_span), threshold, initial_action)
+
+
+def execute_student_weights(probs, action_weights, mode: str = "gate", threshold: float = 0.0,
+                            smooth_span: int = 1, band: float = 0.25, initial_weight: float = 0.0):
+    """
+    Target weight per bar from the student's action probabilities, in time order.
+
+    mode "gate"          : the confidence-gated action of `execute_student_actions`, as a weight.
+    mode "expected"      : the expected weight under the action distribution,
+                           pi_t = sum_a p_t(a) * w(a). This is the quantity the net-of-cost
+                           training objective optimises.
+    mode "expected_band" : a position-dependent no-trade band around the held weight. The held
+                           weight changes only when |pi_t - held| > band, and then moves to the
+                           action level closest to pi_t. With band = half the spacing of the
+                           action grid, the position stays on the five thesis action levels.
+    """
+    import numpy as np
+
+    p = np.asarray(probs, dtype=np.float64)
+    aw = np.asarray(action_weights, dtype=np.float64)
+    if mode == "gate":
+        return aw[execute_student_actions(p, threshold, smooth_span)]
+    pi = p @ aw
+    if mode == "expected":
+        return pi
+    if mode == "expected_band":
+        out = np.empty(len(pi), dtype=np.float64)
+        cur = float(initial_weight)
+        for t in range(len(pi)):
+            if abs(pi[t] - cur) > band:
+                cur = float(aw[int(np.argmin(np.abs(aw - pi[t])))])
+            out[t] = cur
+        return out
+    raise ValueError(f"unknown execution mode: {mode}")

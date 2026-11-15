@@ -32,7 +32,7 @@ from ts.ledger import SMOKE_ENV_VAR, NumberLedger, RunContext
 from ts.study1.ppo_expert import ACTION_WEIGHTS
 from ts.study2.debate import map_continuous_weight_to_discrete_action
 from ts.study3.distillation import StudentDistillationTrainer, verify_property_5_1_orthogonality
-from ts.study3.student_model import execute_student_actions
+from ts.study3.student_model import execute_student_weights
 from ts.study3.teacher_signal import FinBERTReasoningEncoder, build_aligned_distillation_dataset
 
 
@@ -309,6 +309,12 @@ def main() -> None:
     oos_probs_by_l3: Dict[float, List[np.ndarray]] = {l3: [] for l3 in lambda3_grid}
     action_theta = float(cfg.study3.action_confidence_threshold)
     action_span = int(cfg.study3.action_smoothing_span)
+    task_objective = str(cfg.study3.task_objective)
+    execution_mode = str(cfg.study3.execution_mode)
+    execution_band = float(cfg.study3.execution_band)
+
+    def _executed_weights(probs_x: np.ndarray) -> np.ndarray:
+        return execute_student_weights(probs_x, ACTION_WEIGHTS, execution_mode, action_theta, action_span, execution_band)
     oos_hidden_primary_list: List[np.ndarray] = []
     oos_indices_list: List[np.ndarray] = []
     prop_5_1_checks: List[Dict[str, float]] = []
@@ -342,6 +348,8 @@ def main() -> None:
                 batch_size=cfg.study3.batch_size,
                 epochs=epochs,
                 max_grad_norm=cfg.study3.max_grad_norm,
+            task_objective=task_objective,
+            bars_per_year=cfg.evaluation.btc_bars_per_year,
                 seed=42 + fold.fold_id,
                 device=device,
             )
@@ -391,21 +399,21 @@ def main() -> None:
 
     table_6_11 = {}
     for l3 in lambda3_grid:
-        acts = execute_student_actions(np.concatenate(oos_probs_by_l3[l3]), action_theta, action_span)
-        res = bt.run_decisions(eval_df, ACTION_WEIGHTS[acts], phase=2)
+        res = bt.run_decisions(eval_df, _executed_weights(np.concatenate(oos_probs_by_l3[l3])), phase=2)
         table_6_11[f"{l3:.1f}"] = res.summary.to_dict()
 
     primary_probs = np.concatenate(oos_probs_by_l3[cfg.study3.lambda_reasoning])
-    primary_acts = execute_student_actions(primary_probs, action_theta, action_span)
+    primary_weights = _executed_weights(primary_probs)
+    # Action level closest to the executed weight (identical to the action in "gate" mode).
+    primary_acts = np.abs(primary_weights[:, None] - np.asarray(ACTION_WEIGHTS)[None, :]).argmin(axis=1).astype(np.int64)
     ungated_acts = np.argmax(primary_probs, axis=1)
-    primary_weights = ACTION_WEIGHTS[primary_acts]
     res_p2 = bt.run_decisions(eval_df, primary_weights, phase=2)
 
     # Cost sensitivity, reported next to Table 6.7: the same decisions evaluated with every
     # Phase 2 cost term (fee, volatility slippage, market impact) scaled by one factor.
-    # "ungated" is the plain argmax action without the D-18 confidence gate.
+    # "GATED" is the executed rule; "UNGATED" is the plain argmax action.
     cost_sensitivity = {}
-    for label, acts_x in (("GATED", primary_acts), ("UNGATED", ungated_acts)):
+    for label, weights_x in (("GATED", primary_weights), ("UNGATED", ACTION_WEIGHTS[ungated_acts])):
         for mult in COST_MULTIPLIERS:
             bt_m = CausalPortfolioBacktester(
                 initial_capital=cfg.evaluation.initial_capital_usdt,
@@ -416,7 +424,7 @@ def main() -> None:
                 phase2_eta=cfg.evaluation.phase2_eta * mult,
             )
             cost_sensitivity[f"{label}_X{int(round(mult * 100)):03d}"] = bt_m.run_decisions(
-                eval_df, ACTION_WEIGHTS[acts_x], phase=2
+                eval_df, weights_x, phase=2
             ).summary.to_dict()
 
     crisis_proposed = {}
@@ -458,6 +466,8 @@ def main() -> None:
             batch_size=cfg.study3.batch_size,
             epochs=epochs,
             max_grad_norm=cfg.study3.max_grad_norm,
+            task_objective=task_objective,
+            bars_per_year=cfg.evaluation.btc_bars_per_year,
             seed=100 + split_i,
             device=device,
         )
@@ -470,7 +480,7 @@ def main() -> None:
             p1_probs[idx_to_local[int(g_idx)]] = probs_p1_np[k_pos]
 
     # Same execution rule as Phase 2, applied in time order over the evaluation period.
-    p1_pred_weights = ACTION_WEIGHTS[execute_student_actions(p1_probs, action_theta, action_span)]
+    p1_pred_weights = _executed_weights(p1_probs)
 
     res_p1 = bt.run_decisions(eval_df, p1_pred_weights, phase=1)
 
@@ -497,6 +507,9 @@ def main() -> None:
         "lob_input_mode": lob_mode,
         "action_confidence_threshold": action_theta,
         "action_smoothing_span": action_span,
+        "task_objective": task_objective,
+        "execution_mode": execution_mode,
+        "execution_band": execution_band,
         "cost_sensitivity_phase2": cost_sensitivity,
         "share_of_bars_where_gate_changed_action_pct": float(np.mean(primary_acts != ungated_acts)) * 100.0,
         "mean_top_action_probability": float(np.mean(primary_probs.max(axis=1))),
