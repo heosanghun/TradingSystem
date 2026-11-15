@@ -218,6 +218,9 @@ def main() -> None:
     )
     parser.add_argument("--pretrain-epochs", type=int, default=4)
     parser.add_argument("--ppo-rollouts", type=int, default=None)
+    parser.add_argument("--repeat-tag", type=str, default="",
+                        help="Repeat run label, e.g. R2. Outputs go to runs/study1/<tag>/ and ledger IDs get the "
+                             "suffix _<tag>, so a repeat never overwrites the first run's signals or numbers.")
     args = parser.parse_args()
 
     cfg = SystemConfig.from_json(args.config)
@@ -227,10 +230,12 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     cache_dir = PROJECT_ROOT / "data" / "cache"
     out_dir = PROJECT_ROOT / "runs" / "study1"
+    if args.repeat_tag:
+        out_dir = out_dir / args.repeat_tag
     training_logs_dir = out_dir / "training_logs"
     out_dir.mkdir(parents=True, exist_ok=True)
     training_logs_dir.mkdir(parents=True, exist_ok=True)
-    log_path = "runs/study1/metrics.json"
+    log_path = "runs/study1/" + (args.repeat_tag + "/" if args.repeat_tag else "") + "metrics.json"
     script_rel = "scripts/run_study1.py"
 
     binance = BinanceDataFetcher(cache_dir=cache_dir)
@@ -625,6 +630,13 @@ def main() -> None:
         },
     )
     ledger = NumberLedger(run_context=run_ctx)
+    if args.repeat_tag:
+        _record = ledger.record
+
+        def _record_with_suffix(number_id, *a, **k):
+            return _record(f"{number_id}_{args.repeat_tag}", *a, **k)
+
+        ledger.record = _record_with_suffix
     rec_kw = dict(script_path=script_rel, config_sha256=cfg.config_sha256, run_log_path=log_path)
 
     ledger.record("T6.9_SHAP_VISUAL_PCT", "Table 6.9", "Period II SHAP Visual share", vis_mean, "{:.2f}", "%", **rec_kw)
