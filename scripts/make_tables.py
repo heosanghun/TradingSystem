@@ -230,6 +230,17 @@ def compile_markdown_tables(ledger_rows: Dict[str, Dict[str, str]]) -> Tuple[str
     lines.append(f"| 교사-학생 행동 일치율 | {_fmt(ledger_rows, 'T6.15_TEACHER_STUDENT_AGREE_PCT', '%')} |")
     lines.append(f"| 근거 제거 시 결정 변화율 | {_fmt(ledger_rows, 'T6.15_EVIDENCE_FLIP_PCT', '%')} |\n")
 
+    # Cost sensitivity of the student's decisions (Study 3).
+    if any(nid.startswith("CH6_COSTSENS_") for nid in ledger_rows):
+        mults = ("000", "010", "025", "050", "100")
+        lines.append("## 제안 모델의 비용 민감도 (Phase 2 비용 항 전체에 배수 적용, 샤프 지수)" + chr(10))
+        lines.append("| 실행 규칙 | 비용 0배 | 0.1배 | 0.25배 | 0.5배 | 1배 (논문 비용) |")
+        lines.append("| :--- | :---: | :---: | :---: | :---: | :---: |")
+        for label, key in (("임계값 없음 (argmax)", "UNGATED"), ("임계값 0.8 (제안 모델)", "GATED")):
+            cells = " | ".join(_fmt(ledger_rows, f"CH6_COSTSENS_{key}_X{m}_SHARPE") for m in mults)
+            lines.append(f"| {label} | {cells} |")
+        lines.append("")
+
     # Repeat runs of Study 1 (same code, settings and seeds; ledger IDs with a _R<n> suffix).
     repeat_tags = sorted({nid.rsplit("_", 1)[1] for nid in ledger_rows
                           if nid.rsplit("_", 1)[-1][:1] == "R" and nid.rsplit("_", 1)[-1][1:].isdigit()})
