@@ -146,6 +146,13 @@ class Study3Config:
     # D-19: span (in bars) of the causal exponential average applied to the student's action
     # probabilities before the gate (1 = no smoothing).
     action_smoothing_span: int = 1
+    # D-20: task term of the distillation loss ("ppo" = PPO surrogate on sampled actions,
+    # "net_sharpe" = net-of-cost Sharpe of the expected position on contiguous bars) and the
+    # rule that turns action probabilities into a target weight ("gate", "expected",
+    # "expected_band"). Chosen inside the first training fold; see collab/DECISIONS.md.
+    task_objective: str = "ppo"
+    execution_mode: str = "gate"
+    execution_band: float = 0.25
 
 
 @dataclass(frozen=True)
