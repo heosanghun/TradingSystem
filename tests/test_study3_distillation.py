@@ -19,6 +19,7 @@ from ts.future_work.film_double_buffer import (
     DoubleBufferedContextStore,
     FiLMConditionedStudent1DCNN,
 )
+from ts.study1.ppo_expert import ACTION_WEIGHTS
 from ts.study3.distillation import (
     ReasoningDistillationLoss,
     StudentDistillationTrainer,
@@ -28,6 +29,7 @@ from ts.study3.student_model import (
     Student1DCNN,
     apply_action_confidence_gate,
     execute_student_actions,
+    execute_student_weights,
     smooth_action_probabilities,
 )
 from ts.study3.teacher_signal import (
@@ -278,6 +280,86 @@ def test_apply_action_confidence_gate_causal_persistence() -> None:
     assert np.allclose(smoothed.sum(axis=1), 1.0, atol=1e-6)
     assert np.allclose(smoothed[0], probs[0])
     assert execute_student_actions(probs, threshold=0.8, smooth_span=1).tolist() == [2, 3, 3, 0]
+
+
+def test_execute_student_weights_modes_and_net_sharpe_roundtrip() -> None:
+    probs = np.array(
+        [
+            [0.05, 0.05, 0.40, 0.45, 0.05],  # pi = +0.20 (|0.20 - 0.0| <= 0.25 -> stays 0.0)
+            [0.00, 0.00, 0.10, 0.80, 0.10],  # pi = +0.50 (|0.50 - 0.0| > 0.25 -> snaps to +0.5)
+            [0.00, 0.00, 0.45, 0.55, 0.00],  # pi = +0.275 (|0.275 - 0.5| <= 0.25 -> keeps +0.5)
+            [0.85, 0.05, 0.05, 0.05, 0.00],  # pi = -0.85 (|-0.85 - 0.5| > 0.25 -> snaps to -1.0)
+        ],
+        dtype=np.float32,
+    )
+    w_gate = execute_student_weights(probs, ACTION_WEIGHTS, mode="gate", threshold=0.8, smooth_span=1)
+    assert np.allclose(w_gate, [0.0, 0.5, 0.5, -1.0])
+
+    w_exp = execute_student_weights(probs, ACTION_WEIGHTS, mode="expected")
+    assert np.allclose(w_exp, probs @ ACTION_WEIGHTS, atol=1e-6)
+
+    w_band = execute_student_weights(
+        probs, ACTION_WEIGHTS, mode="expected_band", band=0.25, initial_weight=0.0
+    )
+    assert np.allclose(w_band, [0.0, 0.5, 0.5, -1.0])
+
+    with pytest.raises(ValueError, match="unknown execution mode"):
+        execute_student_weights(probs, ACTION_WEIGHTS, mode="invalid_mode")
+
+    with pytest.raises(ValueError, match="unknown task objective"):
+        StudentDistillationTrainer(task_objective="invalid_obj")
+
+    # Short training & online inference roundtrip for task_objective="net_sharpe"
+    rng = np.random.default_rng(19)
+    n_bars = 10
+    per_bar_wins = [
+        [rng.standard_normal((40, 100)).astype(np.float32) for _ in range(10)]
+        for _ in range(n_bars)
+    ]
+    w_finals = np.linspace(-0.5, 0.5, num=n_bars, dtype=np.float32)
+    texts = [f"[Meta PM Consensus] Bar {i} net-sharpe check." for i in range(n_bars)]
+    rets = rng.normal(0.0005, 0.005, size=n_bars).astype(np.float32)
+    costs = np.full(n_bars, 0.001, dtype=np.float32)
+
+    pack = build_aligned_distillation_dataset(
+        per_bar_lob_windows=per_bar_wins,
+        w_final_per_bar=w_finals,
+        consensus_texts_per_bar=texts,
+        next_bar_returns=rets,
+        one_way_cost_rates=costs,
+        finbert_encoder=HashTestReasoningEncoder(),
+    )
+
+    init_ref = Student1DCNN()
+    torch.manual_seed(23)
+    init_conv1 = init_ref.conv1.weight.detach().clone()
+
+    trainer = StudentDistillationTrainer(
+        lambda_reasoning=0.2,
+        epochs=2,
+        batch_size=16,
+        seed=23,
+        device=torch.device("cpu"),
+        task_objective="net_sharpe",
+        net_sharpe_seq_len=4,
+    )
+    student, hist = trainer.fit(pack)
+    assert len(hist) == 2
+    for row in hist:
+        assert np.isfinite(row["total_loss"])
+        assert np.isfinite(row["task_loss"])
+        assert np.isfinite(row["policy_loss"])
+        assert np.isfinite(row["reasoning_loss"])
+    assert not torch.allclose(student.conv1.weight.detach().cpu(), init_conv1)
+
+    online_x = torch.as_tensor(np.stack([w[-1] for w in per_bar_wins], axis=0), dtype=torch.float32)
+    _, online_probs = student.act_online(online_x)
+    online_probs_np = online_probs.cpu().numpy()
+    w_online_exp = execute_student_weights(online_probs_np, ACTION_WEIGHTS, mode="expected")
+    w_online_band = execute_student_weights(online_probs_np, ACTION_WEIGHTS, mode="expected_band", band=0.25)
+    assert w_online_exp.shape == (n_bars,) and np.all(np.isfinite(w_online_exp))
+    assert w_online_band.shape == (n_bars,) and set(w_online_band.tolist()).issubset(set(ACTION_WEIGHTS.tolist()))
+
 
 
 
