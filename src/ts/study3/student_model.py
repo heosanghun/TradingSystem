@@ -97,3 +97,28 @@ def apply_action_confidence_gate(probs, threshold: float, initial_action: int = 
             cur = int(best[t])
         out[t] = cur
     return out
+
+
+def smooth_action_probabilities(probs, span: int):
+    """
+    Causal exponentially weighted average of the per-bar action probabilities:
+      q_t = alpha * p_t + (1 - alpha) * q_{t-1},  alpha = 2 / (span + 1),  q_0 = p_0
+    `span <= 1` returns the input unchanged. Each row of the result still sums to one.
+    The average uses only the current and earlier bars.
+    """
+    import numpy as np
+
+    p = np.asarray(probs, dtype=np.float64)
+    if span <= 1 or len(p) == 0:
+        return p
+    alpha = 2.0 / (float(span) + 1.0)
+    out = np.empty_like(p)
+    out[0] = p[0]
+    for t in range(1, len(p)):
+        out[t] = alpha * p[t] + (1.0 - alpha) * out[t - 1]
+    return out
+
+
+def execute_student_actions(probs, threshold: float, smooth_span: int = 1, initial_action: int = 2):
+    """Execution rule of the student: smooth the probabilities, then apply the confidence gate."""
+    return apply_action_confidence_gate(smooth_action_probabilities(probs, smooth_span), threshold, initial_action)
