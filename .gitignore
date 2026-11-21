@@ -30,3 +30,8 @@ __pycache__/
 # Local credentials (never commit)
 .env
 .env.*
+
+# Coordination files of the development agents (kept locally, not published)
+/collab/
+/AGENTS.md
+/CLAUDE.md

@@ -1,0 +1,805 @@
+{
+  "config_sha256": "d16038cd1c2cbf63",
+  "is_simulated_llm": false,
+  "llm_backend": "ollama",
+  "llm_model": "deepseek-r1:32b",
+  "n_bars_processed": 28468,
+  "run_id": "f4ec4fce5cdd4dbc570a94012c4bbc3bd432f099b029a668ac1825c39e459606",
+  "universe": {
+    "requested": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "BNBUSDT",
+      "SOLUSDT",
+      "XRPUSDT",
+      "ADAUSDT",
+      "DOGEUSDT",
+      "DOTUSDT",
+      "LTCUSDT",
+      "LINKUSDT",
+      "UNIUSDT",
+      "AVAXUSDT",
+      "ATOMUSDT",
+      "TRXUSDT",
+      "ETCUSDT",
+      "XLMUSDT",
+      "FILUSDT",
+      "AAVEUSDT",
+      "EOSUSDT",
+      "BCHUSDT",
+      "EURUSDT",
+      "GBPUSDT",
+      "SPY",
+      "QQQ",
+      "DIA",
+      "IWM",
+      "EFA",
+      "EEM",
+      "XLK",
+      "XLF",
+      "XLE",
+      "XLV",
+      "XLY",
+      "XLP",
+      "XLI",
+      "XLB",
+      "XLU",
+      "XLRE",
+      "XLC",
+      "SMH",
+      "KRE",
+      "ARKK",
+      "TLT",
+      "IEF",
+      "SHY",
+      "TIP",
+      "HYG",
+      "LQD",
+      "^TNX",
+      "^IRX",
+      "GLD",
+      "SLV",
+      "USO",
+      "UNG",
+      "DBC",
+      "UUP",
+      "EURUSD=X",
+      "JPY=X",
+      "GBPUSD=X",
+      "AUDUSD=X",
+      "^VIX",
+      "VIXY"
+    ],
+    "included": [
+      {
+        "symbol": "BTCUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30100,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2024-01-01T00:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30100,
+          "missing_bars": 20
+        },
+        "missing_exact_clock_fraction": 0.0003340906053721769
+      },
+      {
+        "symbol": "ETHUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30100,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2024-01-01T00:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30100,
+          "missing_bars": 20
+        },
+        "missing_exact_clock_fraction": 0.0003340906053721769
+      },
+      {
+        "symbol": "BNBUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30100,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2024-01-01T00:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30100,
+          "missing_bars": 20
+        },
+        "missing_exact_clock_fraction": 0.0003340906053721769
+      },
+      {
+        "symbol": "XRPUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30100,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2024-01-01T00:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30100,
+          "missing_bars": 20
+        },
+        "missing_exact_clock_fraction": 0.0003340906053721769
+      },
+      {
+        "symbol": "ADAUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30100,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2024-01-01T00:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30100,
+          "missing_bars": 20
+        },
+        "missing_exact_clock_fraction": 0.0003340906053721769
+      },
+      {
+        "symbol": "DOGEUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30100,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2024-01-01T00:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30100,
+          "missing_bars": 20
+        },
+        "missing_exact_clock_fraction": 0.0003340906053721769
+      },
+      {
+        "symbol": "LTCUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30100,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2024-01-01T00:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30100,
+          "missing_bars": 20
+        },
+        "missing_exact_clock_fraction": 0.0003340906053721769
+      },
+      {
+        "symbol": "LINKUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30100,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2024-01-01T00:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30100,
+          "missing_bars": 20
+        },
+        "missing_exact_clock_fraction": 0.0003340906053721769
+      },
+      {
+        "symbol": "ATOMUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30100,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2024-01-01T00:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30100,
+          "missing_bars": 20
+        },
+        "missing_exact_clock_fraction": 0.0003340906053721769
+      },
+      {
+        "symbol": "TRXUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30100,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2024-01-01T00:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30100,
+          "missing_bars": 20
+        },
+        "missing_exact_clock_fraction": 0.0003340906053721769
+      },
+      {
+        "symbol": "ETCUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30100,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2024-01-01T00:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30100,
+          "missing_bars": 20
+        },
+        "missing_exact_clock_fraction": 0.0003340906053721769
+      },
+      {
+        "symbol": "XLMUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30100,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2024-01-01T00:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30100,
+          "missing_bars": 20
+        },
+        "missing_exact_clock_fraction": 0.0003340906053721769
+      },
+      {
+        "symbol": "EOSUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30100,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2024-01-01T00:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30100,
+          "missing_bars": 20
+        },
+        "missing_exact_clock_fraction": 0.0003340906053721769
+      },
+      {
+        "symbol": "BCHUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30100,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2024-01-01T00:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30100,
+          "missing_bars": 20
+        },
+        "missing_exact_clock_fraction": 0.0003340906053721769
+      },
+      {
+        "symbol": "EURUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30100,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2024-01-01T00:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30100,
+          "missing_bars": 20
+        },
+        "missing_exact_clock_fraction": 0.0003340906053721769
+      },
+      {
+        "symbol": "GBPUSDT",
+        "source": "Binance spot 1h klines",
+        "resolution": "1h",
+        "source_rows": 30031,
+        "source_start": "2020-07-25T01:00:00+00:00",
+        "source_end": "2023-12-29T03:00:00+00:00",
+        "gap_report": {
+          "expected_grid_bars": 30120,
+          "observed_bars": 30031,
+          "missing_bars": 89
+        },
+        "missing_exact_clock_fraction": 0.00260590672190298
+      },
+      {
+        "symbol": "SPY",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 14347,
+        "source_start": "2020-05-18T09:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.5485433649605773
+      },
+      {
+        "symbol": "QQQ",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 14278,
+        "source_start": "2020-05-18T09:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.5508151810771081
+      },
+      {
+        "symbol": "DIA",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 13837,
+        "source_start": "2020-05-18T09:00:00+00:00",
+        "source_end": "2023-12-29T23:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.5653481224107978
+      },
+      {
+        "symbol": "IWM",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 14305,
+        "source_start": "2020-05-18T09:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.5499465455031405
+      },
+      {
+        "symbol": "EFA",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 10090,
+        "source_start": "2020-05-18T10:00:00+00:00",
+        "source_end": "2023-12-29T23:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.6815114258987037
+      },
+      {
+        "symbol": "EEM",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 11999,
+        "source_start": "2020-05-18T09:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.6224107978083656
+      },
+      {
+        "symbol": "XLK",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 12592,
+        "source_start": "2020-05-18T09:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.6038687692102098
+      },
+      {
+        "symbol": "XLF",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 14095,
+        "source_start": "2020-05-18T09:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.5562608579446746
+      },
+      {
+        "symbol": "XLE",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 13999,
+        "source_start": "2020-05-18T09:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.5586997193638915
+      },
+      {
+        "symbol": "XLV",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 10833,
+        "source_start": "2020-05-18T09:00:00+00:00",
+        "source_end": "2023-12-29T22:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.6581250835226513
+      },
+      {
+        "symbol": "XLY",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 9690,
+        "source_start": "2020-05-18T11:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.6947080048109047
+      },
+      {
+        "symbol": "XLP",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 10537,
+        "source_start": "2020-05-18T12:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.6664105305358813
+      },
+      {
+        "symbol": "XLI",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 10646,
+        "source_start": "2020-05-18T12:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.6643391687825738
+      },
+      {
+        "symbol": "XLB",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 9690,
+        "source_start": "2020-05-18T13:00:00+00:00",
+        "source_end": "2023-12-29T22:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.693839369236937
+      },
+      {
+        "symbol": "XLU",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 10876,
+        "source_start": "2020-05-18T12:00:00+00:00",
+        "source_end": "2023-12-29T22:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.6568889482827743
+      },
+      {
+        "symbol": "XLRE",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 9599,
+        "source_start": "2020-05-18T12:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.6955766403848723
+      },
+      {
+        "symbol": "XLC",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 9048,
+        "source_start": "2020-05-18T13:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.7139182146198049
+      },
+      {
+        "symbol": "SMH",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 11401,
+        "source_start": "2020-05-18T12:00:00+00:00",
+        "source_end": "2023-12-30T00:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.6386141921689162
+      },
+      {
+        "symbol": "KRE",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 10550,
+        "source_start": "2020-05-18T13:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.6675130295336095
+      },
+      {
+        "symbol": "ARKK",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 13800,
+        "source_start": "2020-05-18T12:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.5603367633302152
+      },
+      {
+        "symbol": "TLT",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 13568,
+        "source_start": "2020-05-18T11:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.570426299612455
+      },
+      {
+        "symbol": "IEF",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 9385,
+        "source_start": "2020-05-18T12:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.703795269277028
+      },
+      {
+        "symbol": "SHY",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 9642,
+        "source_start": "2020-05-18T09:00:00+00:00",
+        "source_end": "2023-12-29T22:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.6945743685687559
+      },
+      {
+        "symbol": "TIP",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 8347,
+        "source_start": "2020-05-18T14:00:00+00:00",
+        "source_end": "2023-12-30T00:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.736335694240278
+      },
+      {
+        "symbol": "HYG",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 9860,
+        "source_start": "2020-05-18T12:00:00+00:00",
+        "source_end": "2023-12-29T22:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.6897634638513965
+      },
+      {
+        "symbol": "LQD",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 8602,
+        "source_start": "2020-05-18T13:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.728517974074569
+      },
+      {
+        "symbol": "GLD",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 13934,
+        "source_start": "2020-05-18T09:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.5622076707202993
+      },
+      {
+        "symbol": "SLV",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 14247,
+        "source_start": "2020-05-18T09:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.551717225711613
+      },
+      {
+        "symbol": "USO",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 13932,
+        "source_start": "2020-05-18T09:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.5622076707202993
+      },
+      {
+        "symbol": "UNG",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 13902,
+        "source_start": "2020-05-18T09:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.5623413069624482
+      },
+      {
+        "symbol": "DBC",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 9144,
+        "source_start": "2020-05-18T09:00:00+00:00",
+        "source_end": "2023-12-29T23:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.7099759454764132
+      },
+      {
+        "symbol": "UUP",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 10380,
+        "source_start": "2020-05-18T12:00:00+00:00",
+        "source_end": "2023-12-30T00:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.6718562074034479
+      },
+      {
+        "symbol": "VIXY",
+        "source": "Alpaca v2 stock bars, feed=sip, adjustment=all",
+        "resolution": "1h",
+        "source_rows": 13626,
+        "source_start": "2020-05-18T10:00:00+00:00",
+        "source_end": "2023-12-30T01:00:00+00:00",
+        "gap_report": null,
+        "missing_exact_clock_fraction": 0.5690231190698918
+      }
+    ],
+    "excluded": [
+      {
+        "symbol": "SOLUSDT",
+        "error": "ValueError",
+        "reason": "Archive lacks a known price at the start of the requested clock"
+      },
+      {
+        "symbol": "DOTUSDT",
+        "error": "ValueError",
+        "reason": "Archive lacks a known price at the start of the requested clock"
+      },
+      {
+        "symbol": "UNIUSDT",
+        "error": "ValueError",
+        "reason": "Archive lacks a known price at the start of the requested clock"
+      },
+      {
+        "symbol": "AVAXUSDT",
+        "error": "ValueError",
+        "reason": "Archive lacks a known price at the start of the requested clock"
+      },
+      {
+        "symbol": "FILUSDT",
+        "error": "ValueError",
+        "reason": "Archive lacks a known price at the start of the requested clock"
+      },
+      {
+        "symbol": "AAVEUSDT",
+        "error": "ValueError",
+        "reason": "Archive lacks a known price at the start of the requested clock"
+      },
+      {
+        "symbol": "^TNX",
+        "error": "FileNotFoundError",
+        "reason": "An actual hourly local archive is required"
+      },
+      {
+        "symbol": "^IRX",
+        "error": "FileNotFoundError",
+        "reason": "An actual hourly local archive is required"
+      },
+      {
+        "symbol": "EURUSD=X",
+        "error": "FileNotFoundError",
+        "reason": "An actual hourly local archive is required"
+      },
+      {
+        "symbol": "JPY=X",
+        "error": "FileNotFoundError",
+        "reason": "An actual hourly local archive is required"
+      },
+      {
+        "symbol": "GBPUSD=X",
+        "error": "FileNotFoundError",
+        "reason": "An actual hourly local archive is required"
+      },
+      {
+        "symbol": "AUDUSD=X",
+        "error": "FileNotFoundError",
+        "reason": "An actual hourly local archive is required"
+      },
+      {
+        "symbol": "^VIX",
+        "error": "FileNotFoundError",
+        "reason": "An actual hourly local archive is required"
+      }
+    ]
+  },
+  "n_failed_bars": 0,
+  "debate_stride": 4,
+  "counterfactual_every": 2,
+  "edge_top_k": 30,
+  "ollama_num_ctx": 4096,
+  "n_assets": 49,
+  "n_debated_oos_bars": 4931,
+  "n_counterfactual_pairs": 2466,
+  "edge_verification": {
+    "candidates": 1117615,
+    "sent_to_verifier": 35610,
+    "accepted": 1217,
+    "days": 1187,
+    "note": "per-day counts; a pair verified once in an ISO week is reused on the other days of that week, so sent_to_verifier counts decisions used, not LLM calls"
+  },
+  "citation_checks_oos": {
+    "agent_outputs": 17164,
+    "rejected": 1222,
+    "rejected_missing_citation": 104,
+    "rejected_unknown_id": 1114,
+    "rejected_value_mismatch": 4,
+    "consensus_citations": 3622,
+    "consensus_citations_matched": 3622
+  },
+  "llm_telemetry_before_latency": {
+    "logical_calls": 4,
+    "cache_hits": 3,
+    "http_calls": 5,
+    "http_ms": 51177,
+    "output_tokens": 1267,
+    "prompt_tokens": 2634,
+    "truncated_responses": 4,
+    "failed_attempts": 4,
+    "failed_TruncatedResponseError": 4,
+    "retries": 4,
+    "answers_after_length_notice": 1
+  },
+  "llm_telemetry": {
+    "logical_calls": 172,
+    "cache_hits": 3,
+    "http_calls": 173,
+    "http_ms": 737271,
+    "output_tokens": 21071,
+    "prompt_tokens": 102159,
+    "truncated_responses": 4,
+    "failed_attempts": 4,
+    "failed_TruncatedResponseError": 4,
+    "retries": 4,
+    "answers_after_length_notice": 1
+  },
+  "llm_telemetry_scope": "current process only; persisted historical calls excluded",
+  "diagnostic_run": false,
+  "table_6_15_study2_rows": {
+    "citation_match_rate_pct": 100.0,
+    "hallucination_rejection_rate_pct": 7.119552551852715,
+    "evidence_removal_flip_rate_pct": 14.071370640713706
+  },
+  "table_6_14_latency": {
+    "total": {
+      "n_runs": 50,
+      "mean_ms": 16835.826642005704,
+      "median_ms": 11027.416500000982,
+      "p95_ms": 34583.053530027966,
+      "p99_ms": 36758.8866830786,
+      "std_ms": 9794.471395387975,
+      "device_name": "local Ollama server"
+    },
+    "stages": {
+      "NEWS": {
+        "n_runs": 50,
+        "mean_ms": 1.6612879990134388,
+        "median_ms": 1.5386999875772744,
+        "p95_ms": 2.4948050064267586,
+        "p99_ms": 2.811521980329416,
+        "std_ms": 0.5325944856623683,
+        "device_name": "local Ollama server"
+      },
+      "TE": {
+        "n_runs": 50,
+        "mean_ms": 3101.367312000366,
+        "median_ms": 3003.195949975634,
+        "p95_ms": 3650.085760030197,
+        "p99_ms": 4137.0952220069,
+        "std_ms": 321.8146937469649,
+        "device_name": "local Ollama server"
+      },
+      "GRAPH": {
+        "n_runs": 50,
+        "mean_ms": 7.768738007871434,
+        "median_ms": 1.630850019864738,
+        "p95_ms": 45.304770008078776,
+        "p99_ms": 50.40076902369036,
+        "std_ms": 15.281794707472818,
+        "device_name": "local Ollama server"
+      },
+      "DEBATE": {
+        "n_runs": 50,
+        "mean_ms": 13725.029303998454,
+        "median_ms": 7745.416999969166,
+        "p95_ms": 31462.9125800071,
+        "p99_ms": 33801.575723021524,
+        "std_ms": 9853.61771539691,
+        "device_name": "local Ollama server"
+      }
+    },
+    "n_failed_items": 0
+  },
+  "status": "complete"
+}

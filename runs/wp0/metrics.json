@@ -1,0 +1,122 @@
+{
+  "config_sha256": "8cd29ead263f2ab0",
+  "full_range_gap_report": {
+    "expected_grid_bars": 29952,
+    "observed_bars": 29932,
+    "missing_bars": 20
+  },
+  "eval_range_gap_report": {
+    "expected_grid_bars": 19728,
+    "observed_bars": 19727,
+    "missing_bars": 1
+  },
+  "table_6_2": {
+    "BTCUSDT": {
+      "symbol": "BTCUSDT",
+      "n_bars": 19726,
+      "mean": -1.6639433900227434e-06,
+      "std": 0.005889861007750025,
+      "min_val": -0.07245235706322894,
+      "max_val": 0.06285491313605185,
+      "pearson_kurtosis": 17.402893332189258,
+      "skewness": -0.08131304900761842,
+      "adf_price_stat": -0.8012787857953234,
+      "adf_price_pvalue": 0.965574643928946,
+      "adf_ret_stat": -28.37997709173753,
+      "adf_ret_pvalue": 0.0,
+      "ljung_box_r2_stat": 3469.017614859196,
+      "ljung_box_r2_pvalue": 0.0,
+      "jarque_bera_stat": 170429.25283656368,
+      "jarque_bera_pvalue": 0.0
+    },
+    "SPY": {
+      "symbol": "SPY",
+      "n_bars": 564,
+      "mean": 0.00022172758363568054,
+      "std": 0.011950170138682714,
+      "min_val": -0.044455971171613484,
+      "max_val": 0.053497422861493504,
+      "pearson_kurtosis": 4.362624192527343,
+      "skewness": -0.15658145469793164,
+      "adf_price_stat": -1.5239281422294009,
+      "adf_price_pvalue": 0.8208000906819896,
+      "adf_ret_stat": -23.37890875003468,
+      "adf_ret_pvalue": 0.0,
+      "ljung_box_r2_stat": 189.80506235105116,
+      "ljung_box_r2_pvalue": 9.684932260463489e-28,
+      "jarque_bera_stat": 44.4861622139009,
+      "jarque_bera_pvalue": 2.1875229333022846e-10,
+      "bar_resolution": "1d"
+    },
+    "GLD": {
+      "symbol": "GLD",
+      "n_bars": 564,
+      "mean": 0.0002654353974409417,
+      "std": 0.008832055342352004,
+      "min_val": -0.030161495266206373,
+      "max_val": 0.03164231938177586,
+      "pearson_kurtosis": 3.9590276615878817,
+      "skewness": 0.1507141316418892,
+      "adf_price_stat": -2.445249064270654,
+      "adf_price_pvalue": 0.35585364595094515,
+      "adf_ret_stat": -9.041655154999257,
+      "adf_ret_pvalue": 5.114203494640505e-15,
+      "ljung_box_r2_stat": 31.363881526649962,
+      "ljung_box_r2_pvalue": 0.1435654946486405,
+      "jarque_bera_stat": 22.885221914747135,
+      "jarque_bera_pvalue": 1.0728455462738518e-05,
+      "bar_resolution": "1d"
+    }
+  },
+  "buy_and_hold": {
+    "phase1": {
+      "cum_return_pct": -3.5546147258064376,
+      "cagr_pct": -1.594357983663286,
+      "sharpe": 0.24644272782349536,
+      "sortino": 0.35001459707568305,
+      "mdd_pct": -77.19848663243928,
+      "win_rate_pct": 50.36244740710701,
+      "avg_turnover": 5.069194504993157e-05,
+      "total_bars": 19727,
+      "final_equity": 964453.8527419356
+    },
+    "phase2": {
+      "cum_return_pct": -3.6975352096109138,
+      "cagr_pct": -1.6591400923085975,
+      "sharpe": 0.24525075035191607,
+      "sortino": 0.3483185442098192,
+      "mdd_pct": -77.19848663243944,
+      "win_rate_pct": 50.36244740710701,
+      "avg_turnover": 5.069194504993157e-05,
+      "total_bars": 19727,
+      "final_equity": 963024.6479038908
+    },
+    "crisis_windows": {
+      "luna_rate_hike": {
+        "window_name": "luna_rate_hike",
+        "start_utc": "2022-05-01 00:00:00+00:00",
+        "end_utc": "2022-06-30 23:00:00+00:00",
+        "n_bars": 1464,
+        "window_mdd_pct": -55.32024961853256,
+        "period_return_pct": -47.07575528779092
+      },
+      "ftx_collapse": {
+        "window_name": "ftx_collapse",
+        "start_utc": "2022-11-07 00:00:00+00:00",
+        "end_utc": "2022-11-09 23:00:00+00:00",
+        "n_bars": 72,
+        "window_mdd_pct": -24.948909359557508,
+        "period_return_pct": -23.811061810766066
+      }
+    }
+  },
+  "table_6_14_student_latency": {
+    "n_runs": 10000,
+    "mean_ms": 0.5265306000510463,
+    "median_ms": 0.46209999709390104,
+    "p95_ms": 0.8803350094240153,
+    "p99_ms": 1.4617249835282569,
+    "std_ms": 0.19994203520452422,
+    "device_name": "NVIDIA GeForce RTX 5090 Laptop GPU"
+  }
+}

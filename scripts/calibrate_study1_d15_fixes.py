@@ -1,7 +1,7 @@
 """
 Pre-registered Fold 1 internal validation evaluation for D-15 (b) structural fixes.
 
-Evaluates the candidate set pre-registered in `collab/DECISIONS.md` (commit `4167af6`)
+Evaluates the candidate set pre-registered in the decision log (`docs/DECISIONS.md`; at commit `4167af6` it was `collab/DECISIONS.md`)
 strictly inside Fold 1's 12-month training window (`2020-10-01 .. 2021-09-30`, 8,741 bars):
   - `sub_train`: first 10 months (`2020-10-01 .. 2021-07-31`, 7,283 bars, forward horizon purged)
   - `val`:       last 2 months  (`2021-08-01 .. 2021-09-30`, 1,458 bars)

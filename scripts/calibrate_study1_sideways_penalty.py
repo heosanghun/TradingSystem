@@ -2,7 +2,7 @@
 Choose the sideways-regime turnover penalty C of Eq. (III.19) on data inside the first
 training fold (D-17). The thesis defines the reward but gives no value for C.
 
-Protocol (written to collab/DECISIONS.md before this script was run):
+Protocol (written to the decision log, now docs/DECISIONS.md, before this script was run):
 - Only the first training fold (2020-10-01 .. 2021-09-30) is loaded. Test folds are cut off
   before any feature is computed.
 - Two validation splits inside that fold, each trained on the months before it:

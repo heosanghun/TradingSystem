@@ -9,7 +9,7 @@ regimes with a confidence threshold (Eq. III.16): switch only when the top proba
 at least theta, otherwise keep the previous choice. D-18 applies that rule to the student's
 action.
 
-Protocol (written to collab/DECISIONS.md before this script was run):
+Protocol (written to the decision log, now docs/DECISIONS.md, before this script was run):
 - Only the first training fold (2020-10-01 .. 2021-09-30) is used.
 - Two validation splits inside it, each with a student trained on the months before it:
     split A: train .. 2021-05-31, validate 2021-06-01 .. 2021-07-31

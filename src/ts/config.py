@@ -149,7 +149,7 @@ class Study3Config:
     # D-20: task term of the distillation loss ("ppo" = PPO surrogate on sampled actions,
     # "net_sharpe" = net-of-cost Sharpe of the expected position on contiguous bars) and the
     # rule that turns action probabilities into a target weight ("gate", "expected",
-    # "expected_band"). Chosen inside the first training fold; see collab/DECISIONS.md.
+    # "expected_band"). Chosen inside the first training fold; see docs/DECISIONS.md.
     task_objective: str = "ppo"
     execution_mode: str = "gate"
     execution_band: float = 0.25

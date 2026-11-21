@@ -9,7 +9,7 @@ net-of-cost Sharpe ratio of the expected position over contiguous bars. With it,
 can be executed directly or through a no-trade band around the held weight (Martin 2012;
 de Lataillade et al. 2012).
 
-Protocol (written to collab/DECISIONS.md before this script was run):
+Protocol (written to the decision log, now docs/DECISIONS.md, before this script was run):
 - Only the first training fold (2020-10-01 .. 2021-09-30) is used.
 - Three validation splits inside it, each with students trained on the months before it:
     split C: train .. 2021-03-31, validate 2021-04-01 .. 2021-05-31

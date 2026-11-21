@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "이 저장소의 코드나 실험 기록을 사용하면 아래와 같이 인용해 주십시오."
+title: "TradingSystem: 시장 국면 적응형 다중 모달 앙상블 강화학습과 이중 프로세스 지식 증류 기반의 지능형 트레이딩 시스템 구현"
+type: software
+authors:
+  - family-names: Heo
+    given-names: Sanghun
+repository-code: "https://github.com/heosanghun/TradingSystem"
+license: MIT
+version: thesis-v1.0
+date-released: 2026-11-22
+keywords:
+  - reinforcement learning
+  - knowledge distillation
+  - large language models
+  - algorithmic trading
+  - walk-forward evaluation

@@ -1,0 +1,84 @@
+{
+  "config_sha256": "d16038cd1c2cbf63",
+  "n_bars": 19727,
+  "windows": [
+    24,
+    72,
+    168,
+    720
+  ],
+  "rules": {
+    "ALWAYS_LONG": {
+      "sharpe_after_costs": 0.24755949809954825,
+      "sharpe_before_costs": 0.2491554147222948,
+      "cum_return_pct": -3.4205116146753256,
+      "mdd_pct": -77.19848663243948,
+      "turnover_per_bar": 0.0,
+      "mean_cost_per_unit_turnover_pct": 0.19810806249013682
+    },
+    "SMA24_LONG_OR_CASH": {
+      "sharpe_after_costs": -3.506146805616285,
+      "sharpe_before_costs": 0.2453263747934213,
+      "cum_return_pct": -96.08249550257582,
+      "mdd_pct": -96.68135434447983,
+      "turnover_per_bar": 0.11553279935111022,
+      "mean_cost_per_unit_turnover_pct": 0.14398560139131536
+    },
+    "MOM24_LONG_SHORT": {
+      "sharpe_after_costs": -4.909429969377009,
+      "sharpe_before_costs": -0.2872632605588133,
+      "cum_return_pct": -99.85040198754017,
+      "mdd_pct": -99.86167594820476,
+      "turnover_per_bar": 0.21393085268173984,
+      "mean_cost_per_unit_turnover_pct": 0.13737489752404813
+    },
+    "SMA72_LONG_OR_CASH": {
+      "sharpe_after_costs": -1.7424977014060261,
+      "sharpe_before_costs": 0.5441137604678652,
+      "cum_return_pct": -80.39602750307965,
+      "mdd_pct": -86.63525835154609,
+      "turnover_per_bar": 0.06220216972523573,
+      "mean_cost_per_unit_turnover_pct": 0.1570847524359175
+    },
+    "MOM72_LONG_SHORT": {
+      "sharpe_after_costs": -1.9647249286156878,
+      "sharpe_before_costs": 0.944790029119985,
+      "cum_return_pct": -93.96350729035692,
+      "mdd_pct": -95.2897495296994,
+      "turnover_per_bar": 0.11467099259860083,
+      "mean_cost_per_unit_turnover_pct": 0.16049996738097938
+    },
+    "SMA168_LONG_OR_CASH": {
+      "sharpe_after_costs": -1.4945480909759261,
+      "sharpe_before_costs": 0.00833034217510257,
+      "cum_return_pct": -74.38960332173382,
+      "mdd_pct": -85.70303380346435,
+      "turnover_per_bar": 0.03857852580350806,
+      "mean_cost_per_unit_turnover_pct": 0.1603766473377423
+    },
+    "MOM168_LONG_SHORT": {
+      "sharpe_after_costs": -1.385283469503779,
+      "sharpe_before_costs": 0.5783578739413308,
+      "cum_return_pct": -87.49251775321329,
+      "mdd_pct": -92.25596399842766,
+      "turnover_per_bar": 0.06813342796309439,
+      "mean_cost_per_unit_turnover_pct": 0.1821378255506603
+    },
+    "SMA720_LONG_OR_CASH": {
+      "sharpe_after_costs": 0.37015238126202155,
+      "sharpe_before_costs": 0.9651600756909143,
+      "cum_return_pct": 16.60043476636821,
+      "mdd_pct": -55.003851914011705,
+      "turnover_per_bar": 0.01226807259454527,
+      "mean_cost_per_unit_turnover_pct": 0.19068298712662413
+    },
+    "MOM720_LONG_SHORT": {
+      "sharpe_after_costs": 0.3611859508380535,
+      "sharpe_before_costs": 1.2667010668198775,
+      "cum_return_pct": 11.083535965873924,
+      "mdd_pct": -63.86015147870558,
+      "turnover_per_bar": 0.0220014194464159,
+      "mean_cost_per_unit_turnover_pct": 0.2578879214897489
+    }
+  }
+}
