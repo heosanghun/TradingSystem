@@ -2,8 +2,8 @@
 # (3) Study 2 main run. Everything executes in the clean checkout so that the ledger records
 # are final. Each step stops the chain if it fails. Progress is appended to chain.log.
 param(
-    [string]$Final = "C:\Project\TradingSystem_final",
-    [string]$Main = "C:\Project\TradingSystem"
+    [string]$Final = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "TradingSystem_final"),
+    [string]$Main = (Split-Path $PSScriptRoot -Parent)
 )
 $ErrorActionPreference = "Stop"
 $py = Join-Path $Main ".venv\Scripts\python.exe"

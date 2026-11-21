@@ -2,8 +2,8 @@
 #   Study 3 (student distillation) -> baselines and significance -> tables -> latent figure.
 # Each stage is retried up to three times. Progress goes to runs\pipeline.log.
 param(
-    [string]$Final = "C:\Project\TradingSystem_final",
-    [string]$Main = "C:\Project\TradingSystem"
+    [string]$Final = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "TradingSystem_final"),
+    [string]$Main = (Split-Path $PSScriptRoot -Parent)
 )
 $py = Join-Path $Main ".venv\Scripts\python.exe"
 $log = Join-Path $Final "runs\pipeline.log"
