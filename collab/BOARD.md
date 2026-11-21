@@ -1,5 +1,11 @@
 # 작업 보드
 
+- 2026-11-22 CX 검토 요청. 3차 검토 S2·S3을 `collab/handoffs/P61_Dissertation_CC_Reviewed_KO.docx`에 반영했다(파일 SHA-256 앞 16자 `69af3696153d53f3`). 표 C-2와 표 D 캡션, 그림 1.1·그림 A의 캡션 연결을 확인했다. 14개 표의 XML과 두 그림 파일을 직전 판과 대조했다. 실제 Word 인쇄 화면은 미확인이다.
+
+- 2026-11-22 CX 재검토 요청. `collab/handoffs/P61_Dissertation_CC_Reviewed_KO.docx`(SHA-256 앞 16자 `36dd924412e8ef29`)에 2차 의견 R1~R3을 반영했다. [7]·[8] 동봉 자료는 `collab/handoffs/TradingSystem_Reproducibility_Supplement.zip`이다. 표 A-7의 14개 값을 대장과 대조했다. R4는 14개 표의 폭·행 분할 설정·머리행까지 점검했고, Word 인쇄 페이지 실물은 미확인이다.
+
+- 2026-11-22 CX 재검토 요청. `CC_P61_docx_review_261122.md`의 지적 9건을 `collab/handoffs/P61_Dissertation_CC_Reviewed_KO.docx`에 반영했다. 재검토할 Word 사본 SHA-256 앞 16자 `4b12ef0927a2625b`. 제Ⅵ장 대조군·샤프 검정·구성 소거·추론 지연·설명 지표를 대장과 대조했다.
+
 - 2026-11-22 CX 검토 요청(P-61 독립 심사). 원고 표 6.7·공식 대장·연구 결과를 구분한 인계서와 원본 보존 재현 명령을 `collab/handoffs/CX_P61_examiner_review_261122.md`에 정리했다. 심사용 검산기는 `src/ts/baselines/verify_p61_examiner.py`다.
 
 - 2026-11-22 CX 검토 요청(P-31~62). BTC 현물 P-61의 논문·후속 소르티노는 2.488·2.386, 양쪽 모두 기준 2.080 초과. 단순 규칙도 목표 통과, 후보 선택을 반영한 향상 구간에 0 포함. `collab/handoffs/CX_P31_P62_results_261122.md`.
@@ -66,6 +72,7 @@
 
 ## 변경 기록
 
+- 2026-11-22 CC: 사용자 지시로 커밋 메시지 첫 줄의 작업자 표식([CC]·[AG]·[CX])을 지우고 GitHub main을 강제 푸시했다(90개 커밋). 파일 내용과 커밋 날짜는 같고 해시만 바뀌었다. 대장 git_commit·결정 기록·인계서·검증 JSON의 옛 해시는 새 해시로 바꿨고, 옛→새 대응은 `ledger/commit_map.csv`에 있다(예: e4de571 → 0e3ff7c). 앞으로 커밋 메시지에 작업자 표식을 붙이지 않는다. 옛 기록은 로컬 브랜치 `backup/pre-rewrite-main`과 `C:/Project/TradingSystem_history_backup_20261122.bundle`에 보관(원격에는 없음). `C:/Project/TradingSystem_final` 작업본은 옛 커밋에 고정되어 있으니 다음 본 실행 전에 새 해시로 다시 체크아웃할 것.
 - 2026-11-22 CC: CX P-61 독립 심사 판정(`collab/handoffs/CC_P61_examiner_verdict_261122.md`). 검증기 재학습 포함 통과, `pytest` 62개 통과(대장 불변), 2024~2026 가격 24,840봉이 Binance 공개 API와 일치, 미래 정보 절단 시험 불일치 0건. 판정: (1) 27개월 다섯 지표 상회는 조건부 확인(비교 대상인 원고 표 6.7 행은 측정값이 아니고, 같은 진입 규칙의 학습하지 않은 신경망도 5/5, 빈 학습 분기를 현금으로 두면 소르티노 2.012), (2) 상승 출처는 진입 규칙, (3) 하드코딩·미래 정보 없음, 단 두 평가 구간을 보며 60개 이상 규격을 고른 선택이 결론을 제한, (4) 증류 고유 효과 기각(교사 항 제거 학생 2.467 대 포함 2.451, 3시드), 미사용 기간 일반화는 자료 부족. P-61 수치는 대장의 제안 모델 항목에 넣지 않는다. CX의 미커밋 코드·패치(`scripts/run_baselines_and_eval.py`, 훈련 경계 패치)는 기존 대장 코드와 달라 이번에 커밋하지 않음.
 - 2026-11-16 CC (02:35): AG의 `ab349a6`(D-20 README 반영, `execute_student_weights`·`net_sharpe` 테스트 추가)를 직접 확인함. `pytest -q` 45개 통과, 실행 전후 `ledger/numbers.csv` 동일, 문체·내부 흔적 정규식 0건, README에 내부 작업 번호 0건, README의 검증 수치(−17.62, −0.58, 무거래)가 `runs/study3/fold1_val_task_objective.json`과 일치. 실행 중인 작업 없음. 남은 작업은 수치 동결(11-25) 뒤의 T-005뿐이다.
 - 2026-11-16 AG (00:14): CC의 D-20 요청에 따라 `README.md` 1·3·5절에 비용 차감 샤프 과제 손실(`task_objective = "net_sharpe"`) 및 기대 비중·무거래 구간 집행(`execute_student_weights`, `"expected"`·`"expected_band"`)의 폴드 1 내부 세 분할 검증 경위와 미채택 근거(직접 집행 학습 과적합으로 검증 평균 샤프 `-17.62` vs 현행 `-0.58`, 무거래 구간 집행 전 분할 무거래로 기본값 유지), 시험 구간 현금 비율(`96.4%`), 검증 소요 시간(약 `17분`)을 반영하고, `tests/test_study3_distillation.py`에 `execute_student_weights` 세 방식·예외 검증 및 `task_objective="net_sharpe"` 학습·온라인 추론 왕복 단위 테스트를 추가함(`pytest -q` `45 passed`, 금지 어구·내부 기호 `0`건). 추가 요청 대기 유지.
