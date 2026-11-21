@@ -82,6 +82,11 @@ def main() -> None:
     parser.add_argument("--exclude-hours", type=float, default=24.0)
     parser.add_argument("--permutations", type=int, default=200)
     parser.add_argument("--max-crisis-markers", type=int, default=120, help="Markers drawn per crisis (all points are used in the statistics).")
+    parser.add_argument("--out-name", type=str, default="student_latent_tsne", help="Base name of the PNG/PDF/JSON outputs.")
+    parser.add_argument("--title", type=str, default="System 1 (1D-CNN) 128차원 은닉 잠재 공간의 t-SNE 투영")
+    parser.add_argument("--subtitle", type=str, default="단일 학생 모델(2021년 자료로 학습), 표시된 2022~2023년 봉은 모두 학습에 쓰이지 않은 자료")
+    parser.add_argument("--point-size", type=float, default=9.0)
+    parser.add_argument("--calm-label", type=str, default="그 밖의 구간 (색상 = 시점)")
     args = parser.parse_args()
 
     import matplotlib
@@ -152,7 +157,7 @@ def main() -> None:
     fig, ax = plt.subplots(figsize=(11.5, 6.6), dpi=200)
     tnum = (ts - ts[0]).total_seconds().to_numpy()
     calm = ~is_crisis
-    sc = ax.scatter(xy[calm, 0], xy[calm, 1], c=tnum[calm], cmap="viridis", s=9, alpha=0.75, linewidths=0)
+    sc = ax.scatter(xy[calm, 0], xy[calm, 1], c=tnum[calm], cmap="viridis", s=args.point_size, alpha=0.75, linewidths=0)
     for j, (label, _a, _b, marker, color) in enumerate(CRISIS_WINDOWS):
         idx = np.where(crisis_id == j)[0]
         if len(idx) > args.max_crisis_markers:
@@ -167,34 +172,34 @@ def main() -> None:
     boundary = center + 2.0 * (np.outer(np.cos(theta), evecs[:, 1] * np.sqrt(evals[1]))
                                + np.outer(np.sin(theta), evecs[:, 0] * np.sqrt(evals[0])))
     target = boundary[int(np.argmax(boundary[:, 1]))]
-    ax.annotate(note, xy=target, xytext=(0.99, 1.0), textcoords="axes fraction", fontsize=10,
+    ax.annotate(note, xy=target, xytext=(0.99, 0.975), textcoords="axes fraction", fontsize=10,
                 fontweight="bold", ha="right", va="top",
                 bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#999999", alpha=0.92),
                 arrowprops=dict(arrowstyle="-", color="#333333", lw=1.0), zorder=6)
     ax.margins(y=0.12)
-    ax.scatter([], [], s=14, color="#3b6f8f", label="그 밖의 구간 (색상 = 시점)")
+    ax.scatter([], [], s=14, color="#3b6f8f", label=args.calm_label)
     handles, labels = ax.get_legend_handles_labels()
     ax.legend(handles[-1:] + handles[:-1], labels[-1:] + labels[:-1], loc="lower left", fontsize=9.5, frameon=True)
     cbar = fig.colorbar(sc, ax=ax, pad=0.02)
     quarters = pd.date_range(ts.min().normalize(), ts.max(), freq="QS")
-    ticks = [(q - ts[0]).total_seconds() for q in quarters if q >= ts[0]]
-    cbar.set_ticks(ticks)
-    cbar.set_ticklabels([f"{q.year} Q{q.quarter}" for q in quarters if q >= ts[0]])
+    # The first decision of a day can fall after midnight; keep its quarter's tick at the bottom.
+    shown = [q for q in quarters if q >= ts[0].normalize()]
+    cbar.set_ticks([max(0.0, (q - ts[0]).total_seconds()) for q in shown])
+    cbar.set_ticklabels([f"{q.year} Q{q.quarter}" for q in shown])
     cbar.set_label("시점")
     ax.set_xlabel("t-SNE 차원 1")
     ax.set_ylabel("t-SNE 차원 2")
-    fig.suptitle(f"System 1 (1D-CNN) 128차원 은닉 잠재 공간의 t-SNE 투영 (시드 {args.seed})", fontsize=14, fontweight="bold", y=0.985)
-    ax.set_title("단일 학생 모델(2021년 자료로 학습), 표시된 2022~2023년 봉은 모두 학습에 쓰이지 않은 자료",
-                 fontsize=9, color="#444444", pad=6)
+    fig.suptitle(f"{args.title} (시드 {args.seed})", fontsize=14, fontweight="bold", y=0.985)
+    ax.set_title(args.subtitle, fontsize=9, color="#444444", pad=6)
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
     fig.tight_layout(rect=(0, 0, 1, 0.965))
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_dir / "student_latent_tsne.png")
-    fig.savefig(out_dir / "student_latent_tsne.pdf")
-    (out_dir / "student_latent_tsne.json").write_text(json.dumps(stats, indent=2, ensure_ascii=False), encoding="utf-8")
+    fig.savefig(out_dir / f"{args.out_name}.png")
+    fig.savefig(out_dir / f"{args.out_name}.pdf")
+    (out_dir / f"{args.out_name}.json").write_text(json.dumps(stats, indent=2, ensure_ascii=False), encoding="utf-8")
     print(json.dumps(stats, indent=1, ensure_ascii=False))
 
 
