@@ -1,7 +1,7 @@
 {
   "script_path": "scripts/calibrate_study1_sideways_penalty.py",
-  "preregistered_in_commit": "8465de5",
-  "executed_on_git_state": "8465de5",
+  "preregistered_in_commit": "744f0ee",
+  "executed_on_git_state": "744f0ee",
   "test_fold_accessed": false,
   "ppo_rollouts_per_fold": 64,
   "selection_rule": "highest mean Phase 2 Sharpe over the two validation splits; ties within 0.05 -> lowest mean turnover -> smallest C",

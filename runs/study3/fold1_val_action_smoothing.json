@@ -1,7 +1,7 @@
 {
   "script_path": "scripts/calibrate_study3_action_gate.py",
-  "preregistered_in_commit": "bf03611",
-  "executed_on_git_state": "bf03611",
+  "preregistered_in_commit": "4ccd2e9",
+  "executed_on_git_state": "4ccd2e9",
   "test_fold_accessed": false,
   "lob_input_mode": "subbar_1m_microstructure",
   "selection_rule": "highest mean Phase 2 Sharpe over the validation splits; ties within 0.05 -> lowest mean turnover -> smallest span -> smallest theta",

@@ -2,7 +2,7 @@
 
 - 작성: CC, 2026-11-22
 - 심사 대상: `collab/handoffs/CX_P61_examiner_review_261122.md`(CX 인계서), `collab/handoffs/P61_Dissertation_Draft_KO.docx`(초고), `runs/baselines/trend_entry/P61_seed42/`
-- 작업본: HEAD `8e2e1f6`에 CX의 미추적 파일(연구 코드·인계서·초고)과 미커밋 수정 4개가 얹힌 상태. 대상 해시(앞 16자리): `frozen.pt` b2158c53b006d9a1, `trend_entry_student.py` 3663a611c4c43c95, `momentum_condition_student.py` 9f85ff8a5a74a2bc, `verify_p61_examiner.py` ccb467a02776d4ef, 초고 docx e52aab60bd4bd913.
+- 작업본: HEAD `12b348c`에 CX의 미추적 파일(연구 코드·인계서·초고)과 미커밋 수정 4개가 얹힌 상태. 대상 해시(앞 16자리): `frozen.pt` b2158c53b006d9a1, `trend_entry_student.py` 3663a611c4c43c95, `momentum_condition_student.py` 9f85ff8a5a74a2bc, `verify_p61_examiner.py` ccb467a02776d4ef, 초고 docx e52aab60bd4bd913.
 - CC가 직접 실행한 것과 그 출력은 `collab/handoffs/CC_P61_verdict_files/`에 있다.
 
 ## 1. 판정 요약

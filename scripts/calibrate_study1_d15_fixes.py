@@ -1,7 +1,7 @@
 """
 Pre-registered Fold 1 internal validation evaluation for D-15 (b) structural fixes.
 
-Evaluates the candidate set pre-registered in `collab/DECISIONS.md` (commit `84ec746`)
+Evaluates the candidate set pre-registered in `collab/DECISIONS.md` (commit `4167af6`)
 strictly inside Fold 1's 12-month training window (`2020-10-01 .. 2021-09-30`, 8,741 bars):
   - `sub_train`: first 10 months (`2020-10-01 .. 2021-07-31`, 7,283 bars, forward horizon purged)
   - `val`:       last 2 months  (`2021-08-01 .. 2021-09-30`, 1,458 bars)
@@ -67,7 +67,7 @@ def main() -> None:
         type=str,
         default=str(PROJECT_ROOT / "runs" / "study1" / "fold1_val_d15_calibration.json"),
     )
-    parser.add_argument("--preregistered-commit", type=str, default="84ec746")
+    parser.add_argument("--preregistered-commit", type=str, default="4167af6")
     args = parser.parse_args()
 
     cfg = SystemConfig.from_json(args.config)
@@ -334,7 +334,7 @@ def main() -> None:
         print("[D-15 Row]", json.dumps(row, ensure_ascii=False), flush=True)
         rows.append(row)
 
-    # Apply the pre-registered selection rule from DECISIONS.md (commit 84ec746)
+    # Apply the pre-registered selection rule from DECISIONS.md (commit 4167af6)
     pool_rows = [
         r for r in rows
         if bool(r["in_selection_pool"])

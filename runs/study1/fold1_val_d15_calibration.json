@@ -1,7 +1,7 @@
 {
   "script_path": "scripts/calibrate_study1_d15_fixes.py",
-  "preregistered_in_commit": "84ec746",
-  "executed_on_git_state": "84ec746-dirty",
+  "preregistered_in_commit": "4167af6",
+  "executed_on_git_state": "4167af6-dirty",
   "selection_criterion_pre_registered": true,
   "test_fold_accessed": false,
   "sub_train_window_utc": [

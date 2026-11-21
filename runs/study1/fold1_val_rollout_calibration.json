@@ -1,6 +1,6 @@
 {
   "script_path": "scripts/calibrate_study1_rollouts.py",
-  "measured_code_state": "94ccd6c (Fold 1 sub-train/val calibration prior to committing default_rollouts_per_fold=64)",
+  "measured_code_state": "b4fdab2 (Fold 1 sub-train/val calibration prior to committing default_rollouts_per_fold=64)",
   "sub_train_window_utc": [
     "2020-10-01 00:00:00+00:00",
     "2021-07-31 23:00:00+00:00"

@@ -1,7 +1,7 @@
 {
   "script_path": "scripts/calibrate_study3_task_objective.py",
-  "preregistered_in_commit": "67d0a57",
-  "executed_on_git_state": "67d0a57",
+  "preregistered_in_commit": "7ef1856",
+  "executed_on_git_state": "7ef1856",
   "test_fold_accessed": false,
   "lob_input_mode": "subbar_1m_microstructure",
   "selection_rule": "T1/T2 eligible only if they trade in a validation split; keep T0 unless an eligible candidate exceeds T0's mean Phase 2 Sharpe by more than 0.05; then highest mean, ties within 0.05 -> lower mean turnover",
