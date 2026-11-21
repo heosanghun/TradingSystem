@@ -1,0 +1,28 @@
+{
+  "source_repo": "Julian-Andres-Thomas/BTC-USD",
+  "path": "btc_1h_cleaned.csv",
+  "git_blob": "1f8b736982dda4d0f4e3edffd5fc405355d538e3",
+  "subset_sha256": "d920d0a6392af73db6b9abe750134a8c6a3bdd37a29d8f369d4bed47724f89db",
+  "start": "2015-08-01 00:00:00+00:00",
+  "end": "2017-07-31 23:00:00+00:00",
+  "hours": 17544,
+  "warmup_zero_volume_hours": 107,
+  "P61_rule": {
+    "cum_return_pct": 125.40235631058803,
+    "cagr_pct": 50.050623450793964,
+    "sharpe": 1.6934500184325756,
+    "sortino": 2.2937916711707733,
+    "mdd_pct": -26.20270526320566,
+    "annual_arithmetic_pct": 43.96408233272619,
+    "annual_downside_pct": 19.166554175465507
+  },
+  "buy_hold": {
+    "cum_return_pct": 875.7875711095847,
+    "cagr_pct": 211.88962445113413,
+    "sharpe": 2.0188490861540043,
+    "sortino": 2.7348618548259296,
+    "mdd_pct": -38.67209775967419,
+    "annual_arithmetic_pct": 136.93684702895166,
+    "annual_downside_pct": 50.070846096783015
+  }
+}

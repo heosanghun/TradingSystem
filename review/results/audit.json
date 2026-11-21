@@ -1,0 +1,294 @@
+{
+  "paper": {
+    "student": {
+      "cum_return_pct": 51.48499850927111,
+      "cagr_pct": 20.252799625015538,
+      "sharpe": 1.6462151061019803,
+      "sortino": 2.488176711515483,
+      "mdd_pct": -6.435989315897494,
+      "annual_arithmetic_pct": 19.115929160313325,
+      "annual_downside_pct": 7.68270560199493
+    },
+    "rule": {
+      "cum_return_pct": 55.4314087593367,
+      "cagr_pct": 21.63399962694903,
+      "sharpe": 1.5921305590714137,
+      "sortino": 2.4269440245538205,
+      "mdd_pct": -9.395777641075098,
+      "annual_arithmetic_pct": 20.403935593787857,
+      "annual_downside_pct": 8.407254303089665
+    },
+    "untrained": {
+      "cum_return_pct": 26.198242131045866,
+      "cagr_pct": 10.885274573006832,
+      "sharpe": 1.5860804559675818,
+      "sortino": 2.385490455719387,
+      "mdd_pct": -3.9928683548984045,
+      "annual_arithmetic_pct": 10.553895371466087,
+      "annual_downside_pct": 4.4242035620651325
+    },
+    "P20": {
+      "cum_return_pct": 53.84414214797539,
+      "cagr_pct": 21.080844740901593,
+      "sharpe": 1.6142583598636655,
+      "sortino": 2.41541972623476,
+      "mdd_pct": -5.702236593546006,
+      "annual_arithmetic_pct": 19.886852072716195,
+      "annual_downside_pct": 8.233290411897277
+    },
+    "P20_attribution": {
+      "first_week": {
+        "hours": 1200,
+        "net_sum_pct": 30.020816270592643,
+        "downside_share": 0.24127686112101615
+      },
+      "later_in_spell": {
+        "hours": 4823,
+        "net_sum_pct": 15.303446005920804,
+        "downside_share": 0.7584323998276973
+      },
+      "flat": {
+        "hours": 13704,
+        "net_sum_pct": -0.540251906824814,
+        "downside_share": 0.0002907390512867085
+      }
+    },
+    "P20_only_exposure": {
+      "hours": 456,
+      "net_sum_pct": 5.628762610231028,
+      "gross_sum_pct": 6.262762143214869
+    },
+    "gross": {
+      "cum_return_pct": 53.2499702755199,
+      "cagr_pct": 20.872962898954484,
+      "sharpe": 1.6901828771985656,
+      "sortino": 2.557307831244048,
+      "mdd_pct": -6.051618609202847,
+      "annual_arithmetic_pct": 19.630603246497728,
+      "annual_downside_pct": 7.676276984201808
+    },
+    "annual_cost_pct": 0.514674086184401,
+    "P20_annual_cost_pct": 0.6490058423069838,
+    "annual": {
+      "2021": {
+        "cum_return_pct": 7.708412732508063,
+        "cagr_pct": 34.26007493118111,
+        "sharpe": 2.0500234387506815,
+        "sortino": 3.1707215402395095,
+        "mdd_pct": -5.345079254866025,
+        "annual_arithmetic_pct": 30.571733040414134,
+        "annual_downside_pct": 9.641885183681191
+      },
+      "2022": {
+        "cum_return_pct": 0.0,
+        "cagr_pct": 0.0,
+        "sharpe": 0.0,
+        "sortino": 0.0,
+        "mdd_pct": 0.0,
+        "annual_arithmetic_pct": 0.0,
+        "annual_downside_pct": 0.0
+      },
+      "2023": {
+        "cum_return_pct": 40.64360867101628,
+        "cagr_pct": 40.64908517396007,
+        "sharpe": 2.2463608379535076,
+        "sortino": 3.3778393826111315,
+        "mdd_pct": -6.435989315897784,
+        "annual_arithmetic_pct": 35.34622080057844,
+        "annual_downside_pct": 10.464150836341771
+      }
+    },
+    "sortino_without_best_quarter": 1.4086285142944492,
+    "intervals": {
+      "student": [
+        0.5025393041268712,
+        4.484275986732833
+      ],
+      "student_minus_rule": [
+        -0.3531169687382013,
+        0.46734144140591577
+      ],
+      "student_minus_P20": [
+        -0.7270004770842516,
+        0.9317957165751731
+      ],
+      "student_minus_P28": [
+        -0.21714746129695703,
+        1.118393877077174
+      ]
+    },
+    "double_cost": {
+      "cum_return_pct": 49.745704388492975,
+      "cagr_pct": 19.637716504803393,
+      "sharpe": 1.6017958143899613,
+      "sortino": 2.417870713106694,
+      "mdd_pct": -7.070757420087325,
+      "annual_arithmetic_pct": 18.60336059032993,
+      "annual_downside_pct": 7.694108907265224
+    },
+    "extra_hour": {
+      "cum_return_pct": 48.02391469469824,
+      "cagr_pct": 19.024899141454178,
+      "sharpe": 1.5657106385547481,
+      "sortino": 2.353497761899944,
+      "mdd_pct": -6.975874379384772,
+      "annual_arithmetic_pct": 18.082341124219266,
+      "annual_downside_pct": 7.683177531310529
+    },
+    "annual_turnover": 2.7405028415232655,
+    "P20_annual_turnover": 3.5962492474408863,
+    "cash_in_empty_training_fold": {
+      "cum_return_pct": 33.377885789894954,
+      "cagr_pct": 13.64357964708982,
+      "sharpe": 1.3293098642188022,
+      "sortino": 2.0124682177677964,
+      "mdd_pct": -8.471746677638848,
+      "annual_arithmetic_pct": 13.288540951898742,
+      "annual_downside_pct": 6.603105994209548
+    }
+  },
+  "reused": {
+    "student": {
+      "cum_return_pct": 88.87722834145575,
+      "cagr_pct": 25.14014991680098,
+      "sharpe": 1.636251364431848,
+      "sortino": 2.386236367315459,
+      "mdd_pct": -10.175382792450849,
+      "annual_arithmetic_pct": 23.453495637635008,
+      "annual_downside_pct": 9.828655685111544
+    },
+    "rule": {
+      "cum_return_pct": 94.49870795790105,
+      "cagr_pct": 26.441169857721935,
+      "sharpe": 1.5982317058400384,
+      "sortino": 2.3376925947258713,
+      "mdd_pct": -12.349822098852126,
+      "annual_arithmetic_pct": 24.649675950438226,
+      "annual_downside_pct": 10.544447121084696
+    },
+    "untrained": {
+      "cum_return_pct": 38.31993719339082,
+      "cagr_pct": 12.120236618111946,
+      "sharpe": 1.6747367964244106,
+      "sortino": 2.426963908400093,
+      "mdd_pct": -4.453886825280917,
+      "annual_arithmetic_pct": 11.683555603323875,
+      "annual_downside_pct": 4.814062361160503
+    },
+    "P20": {
+      "cum_return_pct": 43.998627822535276,
+      "cagr_pct": 13.72244352643941,
+      "sharpe": 0.910469432014749,
+      "sortino": 1.3049151236322865,
+      "mdd_pct": -14.946827541626629,
+      "annual_arithmetic_pct": 14.049408773760616,
+      "annual_downside_pct": 10.766530726269378
+    },
+    "P20_attribution": {
+      "first_week": {
+        "hours": 2808,
+        "net_sum_pct": 9.924955500900257,
+        "downside_share": 0.28535476487924516
+      },
+      "later_in_spell": {
+        "hours": 7176,
+        "net_sum_pct": 32.90286335989199,
+        "downside_share": 0.7136039172377211
+      },
+      "flat": {
+        "hours": 14856,
+        "net_sum_pct": -2.989084392731323,
+        "downside_share": 0.0010413178830337288
+      }
+    },
+    "P20_only_exposure": {
+      "hours": 2256,
+      "net_sum_pct": -11.081491461548003,
+      "gross_sum_pct": -9.193631544874325
+    },
+    "gross": {
+      "cum_return_pct": 95.69842228397685,
+      "cagr_pct": 26.71566656975921,
+      "sharpe": 1.7239329320354073,
+      "sortino": 2.516089727640195,
+      "mdd_pct": -8.983539333345725,
+      "annual_arithmetic_pct": 24.704156919635935,
+      "annual_downside_pct": 9.81847215075498
+    },
+    "annual_cost_pct": 1.2506612820009235,
+    "P20_annual_cost_pct": 2.361881126871472,
+    "annual": {
+      "2024": {
+        "cum_return_pct": 64.40537813893616,
+        "cagr_pct": 64.1822057014584,
+        "sharpe": 2.8424144752029923,
+        "sortino": 4.145634005169103,
+        "mdd_pct": -7.995124622166339,
+        "annual_arithmetic_pct": 51.20446680582765,
+        "annual_downside_pct": 12.351420010059233
+      },
+      "2025": {
+        "cum_return_pct": 1.7254998791842446,
+        "cagr_pct": 1.7254998791842446,
+        "sharpe": 0.1998477058494198,
+        "sortino": 0.27986170643350794,
+        "mdd_pct": -9.33970025597043,
+        "annual_arithmetic_pct": 2.4820797243662747,
+        "annual_downside_pct": 8.86895086861764
+      },
+      "2026": {
+        "cum_return_pct": 12.93635012008172,
+        "cagr_pct": 15.727149685016784,
+        "sharpe": 1.3699777440975192,
+        "sortino": 2.136152089091308,
+        "mdd_pct": -4.559550743743513,
+        "annual_arithmetic_pct": 15.2222830086369,
+        "annual_downside_pct": 7.126029596100652
+      }
+    },
+    "sortino_without_best_quarter": 1.7041611167597899,
+    "intervals": {
+      "student": [
+        0.6394046870290497,
+        4.245608077718125
+      ],
+      "student_minus_rule": [
+        -0.23641608942896872,
+        0.3129878773890123
+      ],
+      "student_minus_P20": [
+        0.11474334048029318,
+        2.092992511195758
+      ],
+      "student_minus_P28": [
+        0.008701275767933501,
+        1.552584960332577
+      ]
+    },
+    "double_cost": {
+      "cum_return_pct": 82.38223261323192,
+      "cagr_pct": 23.605363623635633,
+      "sharpe": 1.5488304698359463,
+      "sortino": 2.2553876146381886,
+      "mdd_pct": -11.330441007344415,
+      "annual_arithmetic_pct": 22.221374681322022,
+      "annual_downside_pct": 9.852574580572394
+    },
+    "extra_hour": {
+      "cum_return_pct": 87.25262334009362,
+      "cagr_pct": 24.759495824471035,
+      "sharpe": 1.6156945546205486,
+      "sortino": 2.3534231190492076,
+      "mdd_pct": -9.84030342275275,
+      "annual_arithmetic_pct": 23.147887153341266,
+      "annual_downside_pct": 9.83583740891145
+    },
+    "annual_turnover": 6.434802119858598,
+    "P20_annual_turnover": 12.505578339099884
+  },
+  "november": {
+    "n_hours": 480,
+    "active_hours": 0,
+    "cum_return_pct": 0.0
+  }
+}

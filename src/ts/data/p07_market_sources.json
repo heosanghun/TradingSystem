@@ -1,0 +1,66 @@
+{
+  "repository": "finom/static-klines",
+  "ref": "6ba2f47c88055567183b2abdf2fb8ba6bb502869",
+  "files": [
+    {
+      "name": "ETH_2022.json",
+      "path": ".klines-cache/ETHUSDT/1d/2022-01-01.json",
+      "sha": "0542f7558d6f672721a3c835eb10b73842666837"
+    },
+    {
+      "name": "ETH_2024.json",
+      "path": ".klines-cache/ETHUSDT/1d/2024-01-01.json",
+      "sha": "c479e383d78810db03b7d3b83f462330230fafea"
+    },
+    {
+      "name": "ETH_2026.json",
+      "path": ".klines-cache/ETHUSDT/1d/2026-01-01.json",
+      "sha": "c029ccda874a8d87fe298eccadb69bc5d04023d0"
+    },
+    {
+      "name": "BNB_2022.json",
+      "path": ".klines-cache/BNBUSDT/1d/2022-01-01.json",
+      "sha": "f8b01f7653e25aab9dcf9c9fe53da78f538a09a5"
+    },
+    {
+      "name": "BNB_2024.json",
+      "path": ".klines-cache/BNBUSDT/1d/2024-01-01.json",
+      "sha": "91d4bd75e8bd63fcc829d534858dfb3ce569be40"
+    },
+    {
+      "name": "BNB_2026.json",
+      "path": ".klines-cache/BNBUSDT/1d/2026-01-01.json",
+      "sha": "d95e00ae03ae60dfd1be332687c2f8ef8ce5bd31"
+    },
+    {
+      "name": "XRP_2022.json",
+      "path": ".klines-cache/XRPUSDT/1d/2022-01-01.json",
+      "sha": "bfb58c7a3b7989e74c8f8c9246df7db8e1693c0a"
+    },
+    {
+      "name": "XRP_2024.json",
+      "path": ".klines-cache/XRPUSDT/1d/2024-01-01.json",
+      "sha": "6f32f2bc053c3d4bd9a9bbd1c9c03118596c123b"
+    },
+    {
+      "name": "XRP_2026.json",
+      "path": ".klines-cache/XRPUSDT/1d/2026-01-01.json",
+      "sha": "003ab8eba89f00fc0c13783d4d560bae81edc8be"
+    },
+    {
+      "name": "ADA_2022.json",
+      "path": ".klines-cache/ADAUSDT/1d/2022-01-01.json",
+      "sha": "40c5a2163bd72ce62063b0d9cd03d1bfac2a342f"
+    },
+    {
+      "name": "ADA_2024.json",
+      "path": ".klines-cache/ADAUSDT/1d/2024-01-01.json",
+      "sha": "647ab9b15b140f032169e99158ab10bc764df587"
+    },
+    {
+      "name": "ADA_2026.json",
+      "path": ".klines-cache/ADAUSDT/1d/2026-01-01.json",
+      "sha": "efb507d31932e6976f82438beab4925b78aeaae8"
+    }
+  ]
+}
